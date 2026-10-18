@@ -50,20 +50,25 @@ public class BulkSeeder implements CommandLineRunner {
             if (slug.isEmpty() || placeRepository.findBySlug(slug).isPresent()) {
                 continue;
             }
-            Place p = new Place();
-            p.setSlug(slug);
-            p.setTitle(str(e.get("title")));
-            p.setDescription(str(e.get("description")));
-            p.setCategory(Place.Category.valueOf(str(e.get("category"))));
-            p.setStatus(Place.Status.PUBLISHED);
-            p.setMapQuery(strOrNull(e.get("mapQuery")));
-            p.setYoutubeId(strOrNull(e.get("youtubeId")));
-            p.setImageUrl(strOrNull(e.get("imageUrl")));
-            p.setPublishedAt(LocalDateTime.parse(str(e.get("publishedAt"))));
-            Object vc = e.get("viewCount");
-            p.setViewCount(vc instanceof Number n ? n.longValue() : 0L);
-            placeRepository.save(p);
-            inserted++;
+            try {
+                Place p = new Place();
+                p.setSlug(slug);
+                p.setTitle(str(e.get("title")));
+                p.setDescription(str(e.get("description")));
+                p.setCategory(Place.Category.valueOf(str(e.get("category"))));
+                p.setStatus(Place.Status.PUBLISHED);
+                p.setMapQuery(strOrNull(e.get("mapQuery")));
+                p.setYoutubeId(strOrNull(e.get("youtubeId")));
+                p.setImageUrl(strOrNull(e.get("imageUrl")));
+                p.setPublishedAt(LocalDateTime.parse(str(e.get("publishedAt"))));
+                Object vc = e.get("viewCount");
+                p.setViewCount(vc instanceof Number n ? n.longValue() : 0L);
+                placeRepository.save(p);
+                inserted++;
+            } catch (Exception ex) {
+                // 單篇壞唔好拖累成個 boot：記低，繼續下一篇
+                log.warn("BulkSeeder: skipped slug '{}': {}", slug, ex.getMessage());
+            }
         }
         log.info("BulkSeeder: inserted {} new places ({} total in file)", inserted, entries.size());
     }

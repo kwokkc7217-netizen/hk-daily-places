@@ -63,22 +63,29 @@ Render 冇 native Java runtime，所以一定要用 **Docker**（呢個 repo 已
 
 ## Phase 2：React CMS 後台
 
-CMS 喺 `/admin`：登入後可以新增／編輯／刪除好去處、草稿↔已發佈一鍵切換、上傳圖片去 Cloudinary。
+CMS 喺 `/admin`：登入後可以新增／編輯／刪除好去處、草稿↔已發佈一鍵切換、上傳圖片去 Cloudinary，仲可以喺「管理員」頁管理登入帳號。
+
+### 管理員帳號（DB-backed）
+
+管理員帳號存喺 `admin_users` 表，密碼用 BCrypt 加密（唔會明文儲存，API 亦唔會洩漏 hash）。
+
+- **第一次 deploy**：`admin_users` 係空，開機會用 `ADMIN_USERNAME`／`ADMIN_PASSWORD` 呢兩個 env 一次性建立第一位管理員，之後可以喺 Render 刪走呢兩個 env。
+- **之後**：喺 CMS `/admin` →「管理員」頁新增／刪除管理員、改自己密碼。唔可以刪除自己，亦唔可以刪除最後一位管理員（會鎖死自己）。
 
 ### 新增環境變數
 
 | 變數 | 必填？ | 說明 |
 |---|---|---|
-| `ADMIN_USERNAME` | ✅ 必填 | CMS 登入帳號。冇設會**開機即炒**（fail loudly，唔用預設密碼） |
-| `ADMIN_PASSWORD` | ✅ 必填 | CMS 登入密碼 |
+| `ADMIN_USERNAME` | 首次 deploy 先要 | 一次性 bootstrap：`admin_users` 空嗰陣建立第一位管理員；建立咗之後可以刪走 |
+| `ADMIN_PASSWORD` | 首次 deploy 先要 | 同上（唔好 commit 入 repo） |
 | `CLOUDINARY_URL` | 選填 | 格式 `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`，去 cloudinary.com console → Dashboard 攞。唔設嘅話上傳 API 會回 503，CMS 可以照用人手貼圖片 URL |
 
-Render 部署時，喺 Environment 將呢三個加埋入去（同 `DATABASE_URL`／`DB_USER`／`DB_PASSWORD` 一齊）。
+Render 部署時，將需要嘅 env 加喺 Environment（同 `DATABASE_URL`／`DB_USER`／`DB_PASSWORD` 一齊）。
 
 ### 登入流程
 
 1. 開 `https://你的站/admin`，會見到登入頁
-2. 入 `ADMIN_USERNAME`／`ADMIN_PASSWORD`
+2. 入第一位管理員嘅帳號密碼（第一次 deploy 時用 `ADMIN_USERNAME`／`ADMIN_PASSWORD` 建立）
 3. 登入行 form POST（JSON 回應，唔 redirect），session 用 cookie
 
 ### CSRF 注意

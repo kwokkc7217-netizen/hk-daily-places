@@ -83,3 +83,13 @@ export function uploadImage(file) {
   form.append('file', file)
   return api('/api/admin/upload', { method: 'POST', body: form })
 }
+
+export const listUsers = () => api('/api/admin/users')
+
+export const createUser = (username, password) =>
+  api('/api/admin/users', { method: 'POST', body: { username, password } })
+
+export const deleteUser = (id) => api('/api/admin/users/' + id, { method: 'DELETE' })
+
+export const changeMyPassword = (password) =>
+  api('/api/admin/users/me/password', { method: 'PUT', body: { password } })

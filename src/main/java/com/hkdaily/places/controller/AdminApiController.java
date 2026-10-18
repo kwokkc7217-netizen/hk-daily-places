@@ -1,12 +1,15 @@
 package com.hkdaily.places.controller;
 
+import com.hkdaily.places.model.AdminUser;
 import com.hkdaily.places.model.Place;
+import com.hkdaily.places.repository.AdminUserRepository;
 import com.hkdaily.places.repository.PlaceRepository;
 import com.hkdaily.places.service.CloudinaryService;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,10 +36,24 @@ public class AdminApiController {
 
     private final PlaceRepository placeRepository;
     private final CloudinaryService cloudinaryService;
+    private final AdminUserRepository adminUserRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public AdminApiController(PlaceRepository placeRepository, CloudinaryService cloudinaryService) {
+    public AdminApiController(PlaceRepository placeRepository,
+                              CloudinaryService cloudinaryService,
+                              AdminUserRepository adminUserRepository,
+                              PasswordEncoder passwordEncoder) {
         this.placeRepository = placeRepository;
         this.cloudinaryService = cloudinaryService;
+        this.adminUserRepository = adminUserRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /** 對外嘅管理員資料——永遠唔包 passwordHash。 */
+    private record AdminUserDto(Long id, String username, String role, LocalDateTime createdAt) {
+        static AdminUserDto from(AdminUser u) {
+            return new AdminUserDto(u.getId(), u.getUsername(), u.getRole(), u.getCreatedAt());
+        }
     }
 
     /** 證明個 session work（React 一開波就 call 呢個） */
@@ -126,5 +143,71 @@ public class AdminApiController {
         if (place.getStatus() == Place.Status.PUBLISHED && place.getPublishedAt() == null) {
             place.setPublishedAt(LocalDateTime.now());
         }
+    }
+
+    // ================= 管理員帳號管理 =================
+
+    /** 管理員列表（唔包 passwordHash） */
+    @GetMapping("/users")
+    public List<AdminUserDto> listUsers() {
+        return adminUserRepository.findAll(Sort.by(Sort.Direction.ASC, "id"))
+                .stream()
+                .map(AdminUserDto::from)
+                .toList();
+    }
+
+    /** 新增管理員 */
+    @PostMapping("/users")
+    public ResponseEntity<?> createUser(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String password = body.get("password");
+        if (username == null || username.isBlank() || password == null || password.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "username and password required"));
+        }
+        String name = username.strip();
+        if (adminUserRepository.existsByUsername(name)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "username already exists"));
+        }
+        AdminUser u = new AdminUser();
+        u.setUsername(name);
+        u.setPasswordHash(passwordEncoder.encode(password));
+        u.setRole("ADMIN");
+        AdminUser saved = adminUserRepository.save(u);
+        return ResponseEntity.status(HttpStatus.CREATED).body(AdminUserDto.from(saved));
+    }
+
+    /** 刪除管理員：唔可以刪自己，唔可以刪走最後一位 */
+    @DeleteMapping("/users/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long id, Authentication auth) {
+        AdminUser target = adminUserRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        AdminUser me = adminUserRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (target.getId().equals(me.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "cannot delete yourself"));
+        }
+        if (adminUserRepository.countByRole("ADMIN") <= 1) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "cannot delete the last admin"));
+        }
+        adminUserRepository.delete(target);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 改自己密碼（最少 8 個字） */
+    @PutMapping("/users/me/password")
+    public ResponseEntity<?> changeMyPassword(@RequestBody Map<String, String> body, Authentication auth) {
+        String password = body.get("password");
+        if (password == null || password.length() < 8) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "password must be at least 8 characters"));
+        }
+        AdminUser me = adminUserRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        me.setPasswordHash(passwordEncoder.encode(password));
+        adminUserRepository.save(me);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.SpaCsrfTokenRequestHandler;
 
 /**
  * Phase 2：CMS 登入保護。
@@ -55,6 +56,9 @@ public class SecurityConfig {
             )
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                // SPA 專用：每個 response 都即時派 XSRF-TOKEN cookie
+                // （唔加呢行，純 API 嘅 401 回應係唔會 set cookie，React 拎唔到 token 去 login）
+                .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
             );
         return http.build();
     }

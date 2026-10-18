@@ -75,6 +75,9 @@ public class Place {
     private LocalDateTime createdAt;
 
     /** 瀏覽次數（detail 頁每次載入 +1） */
+    // 注意：primitive long 會令 Hibernate 出 NOT NULL column，Postgres 唔俾喺有資料嘅表加 NOT NULL 又冇 default 嘅 column
+    // （試過，開機炒 "contains null values"）。所以要俾個 DB default，等舊 row 自動補 0。
+    @Column(nullable = false, columnDefinition = "bigint default 0")
     private long viewCount = 0;
 
     @PrePersist

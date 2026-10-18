@@ -99,3 +99,10 @@ Spring 派 `XSRF-TOKEN` cookie（HttpOnly=false），React 每次 POST/PUT/DELET
 - 公開頁繼續 **Thymeleaf server-render**（AdSense 政策：crawler 唔行 JS 都要睇到全文）
 - React 只做 `/admin` CMS（login wall 入面，唔使廣告）——如果成個站都係 React SPA，就會重蹈之前「無內容版面」嘅覆轍
 - `/api/admin/**` 全部要 ADMIN role；其他路徑一律 deny（白名單制）
+
+## Phase 3：每日 cron AI 直接 publish
+
+- 內部 API：`POST /api/internal/places`，header `X-Job-Token` 要同 env `DAILY_JOB_TOKEN` 一致（constant-time 比較）；未設 token 回 503，token 錯回 401。
+- Body（JSON）：`slug`、`title`、`description`、`category`（HIKING/SHOPPING/MOVIE）必填；`mapQuery`、`youtubeId`、`imageUrl` 選填。成功直接 `PUBLISHED`，回 201；slug 重覆回 409。
+- 每日朝早有個 cron（Muse 排程）research 一個香港好去處（行山／購物／睇戲輪住嚟，電影會 check 當期上映），圖片 URL 逐張 curl 驗過 200 先 publish。
+- 唔經 admin session，所以 CMS 密碼唔使畀 cron；`DAILY_JOB_TOKEN` 淨係 Render env 同 cron job config 有。

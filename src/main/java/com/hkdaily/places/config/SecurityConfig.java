@@ -25,6 +25,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
                 .requestMatchers("/", "/place/**", "/category/**", "/api/hello", "/ads.txt", "/error").permitAll()
+                // Phase 3：每日 cron 內部 API（controller 入面再用 DAILY_JOB_TOKEN 驗）
+                .requestMatchers("/api/internal/**").permitAll()
                 .requestMatchers("/admin/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().denyAll()

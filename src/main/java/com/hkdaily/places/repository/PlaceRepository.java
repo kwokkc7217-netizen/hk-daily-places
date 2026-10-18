@@ -10,6 +10,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
     List<Place> findByStatusOrderByPublishedAtDesc(Place.Status status);
 
+    Optional<Place> findBySlug(String slug);
+
     Optional<Place> findBySlugAndStatus(String slug, Place.Status status);
 
     List<Place> findByCategoryAndStatusOrderByPublishedAtDesc(Place.Category category, Place.Status status);

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" th:content="${pageDesc} ?: '每日香港好去處：精選香港行山徑、購物熱點同電影推介，每日更新。'">
+  <title th:text="(${pageTitle} ?: '首頁') + '｜每日香港好去處'">每日香港好去處</title>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4257803181954368" crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", system-ui, sans-serif; margin: 0; color: #222; line-height: 1.75; background: #fafafa; }
+    .wrap { max-width: 800px; margin: 0 auto; padding: 0 16px; }
+    header.site { background: #14532d; color: #fff; }
+    header.site .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding-top: 12px; padding-bottom: 12px; }
+    .brand { color: #fff; text-decoration: none; font-size: 1.35em; font-weight: 700; }
+    nav.main a { color: #d1fae5; text-decoration: none; margin-left: 18px; font-size: 1.02em; }
+    nav.main a:hover { color: #fff; text-decoration: underline; }
+    main { padding-top: 8px; padding-bottom: 32px; }
+    .hero { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 20px 22px; margin: 18px 0 24px; }
+    .hero h1 { margin: 0 0 6px; font-size: 1.6em; }
+    .hero p { margin: 0; color: #555; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .card img { width: 100%; height: 180px; object-fit: cover; display: block; background: #eee; }
+    .card-body { padding: 14px 16px 16px; }
+    .badge { display: inline-block; background: #15803d; color: #fff; font-size: .82em; padding: 2px 10px; border-radius: 12px; margin-bottom: 8px; }
+    .card h2 { font-size: 1.15em; margin: 0 0 6px; line-height: 1.4; }
+    .card h2 a { color: #222; text-decoration: none; }
+    .card h2 a:hover { color: #15803d; }
+    .card p { margin: 0; color: #555; font-size: .95em; }
+    article.place h1 { font-size: 1.7em; line-height: 1.4; margin: .4em 0 .2em; }
+    .meta { color: #888; font-size: .9em; margin: 0 0 1em; }
+    .hero-img { width: 100%; border-radius: 10px; margin: 8px 0 4px; background: #eee; }
+    .desc { white-space: pre-line; margin: 1em 0; }
+    .desc p { margin: .7em 0; }
+    h2.section { font-size: 1.25em; margin: 1.6em 0 .5em; border-left: 5px solid #15803d; padding-left: 10px; }
+    iframe.map { width: 100%; height: 380px; border: 1px solid #ddd; border-radius: 10px; }
+    .video { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; }
+    .video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+    .back { margin-top: 24px; }
+    .back a { color: #15803d; }
+    .adwrap { margin: 20px 0; text-align: center; }
+    .adlabel { display: block; font-size: .75em; color: #aaa; letter-spacing: 2px; }
+    footer.site { border-top: 1px solid #ddd; color: #888; font-size: .88em; padding: 18px 0 28px; margin-top: 24px; }
+    .notfound { text-align: center; padding: 60px 0; }
+    .notfound h1 { font-size: 2em; }
+  </style>
+</head>
+<body>
+  <header class="site" th:fragment="header">
+    <div class="wrap">
+      <a class="brand" href="/">每日香港好去處</a>
+      <nav class="main">
+        <a href="/">首頁</a>
+        <a href="/category/hiking">行山</a>
+        <a href="/category/shopping">購物</a>
+        <a href="/category/movie">睇戲</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="adwrap" th:fragment="adTop">
+    <span class="adlabel">廣告</span>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-4257803181954368" data-ad-slot="6515917749" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <div class="adwrap" th:fragment="adArticle">
+    <span class="adlabel">廣告</span>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-4257803181954368" data-ad-slot="2903975795" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <footer class="site" th:fragment="footer">
+    <div class="wrap">
+      <p>© 2026 每日香港好去處 ｜ 發現香港每日好去處：行山、購物、睇戲</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+<div th:replace="~{layout :: adTop}"></div>
+<main class="wrap">
+  <section class="hero">
+    <h1><span th:text="${category.displayName}">分類</span>好去處</h1>
+    <p>精選香港<span th:text="${category.displayName}">分類</span>推介。</p>
+  </section>
+
+  <section class="cards" th:if="${not #lists.isEmpty(places)}">
+    <article class="card" th:each="place : ${places}">
+      <a th:href="@{/place/{slug}(slug=${place.slug})}">
+        <img th:if="${not #strings.isEmpty(place.imageUrl)}" th:src="${place.imageUrl}" th:alt="${place.title}" loading="lazy">
+      </a>
+      <div class="card-body">
+        <span class="badge" th:text="${place.category.displayName}">分類</span>
+        <h2><a th:href="@{/place/{slug}(slug=${place.slug})}" th:text="${place.title}">標題</a></h2>
+        <p th:text="${#strings.abbreviate(place.description, 90)}">簡介</p>
+      </div>
+    </article>
+  </section>
+  <p th:if="${#lists.isEmpty(places)}">呢個分類暫時未有內容，敬請期待。</p>
+</main>
+<div th:replace="~{layout :: footer}"></div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+<div th:replace="~{layout :: adTop}"></div>
+<main class="wrap">
+  <article class="place">
+    <span class="badge" th:text="${place.category.displayName}">分類</span>
+    <h1 th:text="${place.title}">標題</h1>
+    <p class="meta" th:if="${place.publishedAt != null}" th:text="${#temporals.format(place.publishedAt, 'yyyy-MM-dd')}">日期</p>
+    <img class="hero-img" th:if="${not #strings.isEmpty(place.imageUrl)}" th:src="${place.imageUrl}" th:alt="${place.title}">
+    <div class="desc" th:text="${place.description}">內文</div>
+
+    <div th:replace="~{layout :: adArticle}"></div>
+
+    <div th:if="${not #strings.isEmpty(place.mapQuery)}">
+      <h2 class="section">地圖</h2>
+      <iframe class="map" th:src="@{https://maps.google.com/maps(q=${place.mapQuery},output='embed')}" loading="lazy" title="地圖"></iframe>
+    </div>
+
+    <div th:if="${not #strings.isEmpty(place.youtubeId)}">
+      <h2 class="section">影片介紹</h2>
+      <div class="video">
+        <iframe th:src="'https://www.youtube-nocookie.com/embed/' + ${place.youtubeId}" title="YouTube 影片" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+      </div>
+    </div>
+
+    <p class="back"><a th:href="@{/category/{name}(name=${#strings.toLowerCase(place.category.name())})}">← 更多<span th:text="${place.category.displayName}">分類</span>好去處</a></p>
+  </article>
+</main>
+<div th:replace="~{layout :: footer}"></div>
+</body>
+</html>

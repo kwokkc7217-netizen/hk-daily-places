@@ -113,3 +113,13 @@ Spring 派 `XSRF-TOKEN` cookie（HttpOnly=false），React 每次 POST/PUT/DELET
 - 排序模式：`newest`（發佈日期新到舊，預設）、`oldest`（舊到新）、`popular`（瀏覽次數高到低）；非法值自動用 `newest`，超範圍頁數自動 clamp 去最後一頁。
 - 詳情頁每次載入 `viewCount +1`（`@Modifying` JPQL，`@Transactional`），影響「最多人睇」排序。
 - Bulk seed：`src/main/resources/seed/bulk-places.json`（200 篇：70 行山／60 購物／70 電影，發佈日期隨機過去 365 日，瀏覽數加權隨機），`seed/BulkSeeder`（`@Order(3)`）用 slug 做 idempotent upsert——重跑唔會重複。圖片全部逐張 curl 驗過 200 先用（Wikimedia／TMDB）；搵唔到可驗證海報嘅電影 `imageUrl` 留空（template 已處理 null）。
+
+## 數據庫 Console（CMS 內 SQL 執行器）
+
+`/admin` →「數據庫」：phpMyAdmin 式 SQL console，唔使寫 Java 都可以查／改 production DB。
+
+- 限 ADMIN 登入先用到；寫操作（非 SELECT/WITH）執行前會彈 confirm。
+- 一次只准一句 SQL（唔俾用分號串多句）；SELECT/WITH 最多回 500 列。
+- 有三個 preset：places 頭 10 筆、文章總數、管理員列表（特登只 select 明文欄）。
+- 錯誤只回 DB 訊息，唔回 stack trace。
+- ⚠️ 唔好 `SELECT password_hash`——hash 外洩等於將所有 admin 密碼交出去。

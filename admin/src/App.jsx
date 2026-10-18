@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Editor from './pages/Editor.jsx'
 import Users from './pages/Users.jsx'
+import Sql from './pages/Sql.jsx'
 
 export default function App() {
   const [user, setUser] = useState(undefined) // undefined = 載入中
@@ -44,6 +45,7 @@ export default function App() {
           <Link to="/">文章管理</Link>
           <Link to="/new">新增文章</Link>
           <Link to="/users">管理員</Link>
+          <Link to="/sql">數據庫</Link>
           <button onClick={doLogout}>登出 ({user})</button>
         </nav>
       </header>
@@ -52,6 +54,7 @@ export default function App() {
         <Route path="/new" element={<Editor />} />
         <Route path="/edit/:id" element={<Editor />} />
         <Route path="/users" element={<Users />} />
+        <Route path="/sql" element={<Sql />} />
         <Route path="*" element={<Dashboard />} />
       </Routes>
     </div>

@@ -93,3 +93,5 @@ export const deleteUser = (id) => api('/api/admin/users/' + id, { method: 'DELET
 
 export const changeMyPassword = (password) =>
   api('/api/admin/users/me/password', { method: 'PUT', body: { password } })
+
+export const runSql = (sql) => api('/api/admin/sql', { method: 'POST', body: { sql } })

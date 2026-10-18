@@ -1,3 +1,5 @@
 target/
 .git/
 .gitignore
+admin/node_modules/
+admin/dist/

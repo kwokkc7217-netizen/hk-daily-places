@@ -57,6 +57,38 @@ Render 冇 native Java runtime，所以一定要用 **Docker**（呢個 repo 已
 
 ## Phase 1 冇包嘅嘢（Phase 2 / 3）
 
-- **React CMS 後台**（login、新增／改好去處、Cloudinary 上傳圖片）→ Phase 2
+- ~~**React CMS 後台**（login、新增／改好去處、Cloudinary 上傳圖片）→ Phase 2~~ ✅ 已完成（見下）
 - **每日 cronjob**：每日 AI 準備一篇草稿入 DB（DRAFT），人手喺 CMS 一鍵 publish → Phase 3
 - TMDB 電影資料自動同步（而家電影內容要人手入 `youtubeId` 同資料）
+
+## Phase 2：React CMS 後台
+
+CMS 喺 `/admin`：登入後可以新增／編輯／刪除好去處、草稿↔已發佈一鍵切換、上傳圖片去 Cloudinary。
+
+### 新增環境變數
+
+| 變數 | 必填？ | 說明 |
+|---|---|---|
+| `ADMIN_USERNAME` | ✅ 必填 | CMS 登入帳號。冇設會**開機即炒**（fail loudly，唔用預設密碼） |
+| `ADMIN_PASSWORD` | ✅ 必填 | CMS 登入密碼 |
+| `CLOUDINARY_URL` | 選填 | 格式 `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`，去 cloudinary.com console → Dashboard 攞。唔設嘅話上傳 API 會回 503，CMS 可以照用人手貼圖片 URL |
+
+Render 部署時，喺 Environment 將呢三個加埋入去（同 `DATABASE_URL`／`DB_USER`／`DB_PASSWORD` 一齊）。
+
+### 登入流程
+
+1. 開 `https://你的站/admin`，會見到登入頁
+2. 入 `ADMIN_USERNAME`／`ADMIN_PASSWORD`
+3. 登入行 form POST（JSON 回應，唔 redirect），session 用 cookie
+
+### CSRF 注意
+
+前後端同源（`/admin`＋`/api/admin`），CSRF 行 cookie 制：
+Spring 派 `XSRF-TOKEN` cookie（HttpOnly=false），React 每次 POST/PUT/DELETE 自動帶 `X-XSRF-TOKEN` header。
+唔使人手搞，但唔好閂咗 cookie，否則 login 會 403。
+
+### 架構取捨（老實講）
+
+- 公開頁繼續 **Thymeleaf server-render**（AdSense 政策：crawler 唔行 JS 都要睇到全文）
+- React 只做 `/admin` CMS（login wall 入面，唔使廣告）——如果成個站都係 React SPA，就會重蹈之前「無內容版面」嘅覆轍
+- `/api/admin/**` 全部要 ADMIN role；其他路徑一律 deny（白名單制）

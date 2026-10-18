@@ -62,7 +62,10 @@ public class SecurityConfig {
                 csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         // 每個 response 都即時派 XSRF-TOKEN cookie
                         // （唔加呢行，純 API 嘅 401 回應係唔會 set cookie，React 拎唔到 token 去 login）
-                        .csrfTokenRequestHandler(spaHandler);
+                        .csrfTokenRequestHandler(spaHandler)
+                        // /api/internal 係 machine-to-machine（X-Job-Token 認證，唔靠 browser cookie），
+                        // 豁免 CSRF——唔豁免嘅話 cron 冇 CSRF token 會食 403，連 controller 都入唔到
+                        .ignoringRequestMatchers("/api/internal/**");
             });
         return http.build();
     }

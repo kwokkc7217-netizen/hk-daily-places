@@ -68,6 +68,8 @@ public class Place {
     /** YouTube 影片 ID（可空），例如 "dQw4w9WgXcQ" */
     private String youtubeId;
 
+    /** 圖片 URL（Wikimedia 那種 percent-encoded 長 URL 可以成 500+ 字元，所以用 TEXT） */
+    @Column(columnDefinition = "TEXT")
     private String imageUrl;
 
     private LocalDateTime publishedAt;

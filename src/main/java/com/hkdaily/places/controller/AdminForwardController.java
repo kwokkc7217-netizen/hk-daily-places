@@ -10,11 +10,19 @@ import org.springframework.web.bind.annotation.GetMapping;
  * <p>
  * 有點嘅（/admin/assets/index-*.js）唔會 match，照行 static resource handler。
  * /api/admin/** 唔同 prefix，唔會畀呢度食咗。
+ * <p>
+ * 注意：PathPattern 唔俾 ** 後面再加嘢（開機會炒
+ * "No more pattern data allowed after **"），所以用逐層列舉；
+ * 目前 CMS 路由最深兩層，列到三層做保險。
  */
 @Controller
 public class AdminForwardController {
 
-    @GetMapping(value = {"/admin", "/admin/{p:[^.]*}", "/admin/**/{p:[^.]*}"})
+    @GetMapping(value = {
+            "/admin",
+            "/admin/{p:[^.]*}",
+            "/admin/{p:[^.]*}/{q:[^.]*}",
+            "/admin/{p:[^.]*}/{q:[^.]*}/{r:[^.]*}"})
     public String admin() {
         return "forward:/admin/index.html";
     }

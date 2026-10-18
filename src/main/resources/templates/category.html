@@ -10,8 +10,14 @@
     <p>精選香港<span th:text="${category.displayName}">分類</span>推介。</p>
   </section>
 
-  <section class="cards" th:if="${not #lists.isEmpty(places)}">
-    <article class="card" th:each="place : ${places}">
+  <div class="sortbar" th:if="${not places.empty}">
+    <a th:href="@{${baseUrl}(sort='newest')}" th:classappend="${sort == 'newest'} ? 'active'">最新</a>
+    <a th:href="@{${baseUrl}(sort='oldest')}" th:classappend="${sort == 'oldest'} ? 'active'">最早</a>
+    <a th:href="@{${baseUrl}(sort='popular')}" th:classappend="${sort == 'popular'} ? 'active'">最多人睇</a>
+  </div>
+
+  <section class="cards" th:if="${not places.empty}">
+    <article class="card" th:each="place : ${places.content}">
       <a th:href="@{/place/{slug}(slug=${place.slug})}">
         <img th:if="${not #strings.isEmpty(place.imageUrl)}" th:src="${place.imageUrl}" th:alt="${place.title}" loading="lazy">
       </a>
@@ -22,7 +28,16 @@
       </div>
     </article>
   </section>
-  <p th:if="${#lists.isEmpty(places)}">呢個分類暫時未有內容，敬請期待。</p>
+  <p th:if="${places.empty}">呢個分類暫時未有內容，敬請期待。</p>
+
+  <nav class="pagination" th:if="${places.totalPages > 1}">
+    <a th:if="${places.hasPrevious()}" th:href="@{${baseUrl}(page=${places.number - 1}, sort=${sort})}">上一頁</a>
+    <th:block th:each="i : ${#numbers.sequence(0, places.totalPages - 1)}">
+      <span th:if="${i == places.number}" class="current" th:text="${i + 1}">1</span>
+      <a th:if="${i != places.number}" th:href="@{${baseUrl}(page=${i}, sort=${sort})}" th:text="${i + 1}">2</a>
+    </th:block>
+    <a th:if="${places.hasNext()}" th:href="@{${baseUrl}(page=${places.number + 1}, sort=${sort})}">下一頁</a>
+  </nav>
 </main>
 <div th:replace="~{layout :: footer}"></div>
 </body>

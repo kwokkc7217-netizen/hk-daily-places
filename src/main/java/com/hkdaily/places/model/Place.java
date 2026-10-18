@@ -74,6 +74,9 @@ public class Place {
 
     private LocalDateTime createdAt;
 
+    /** 瀏覽次數（detail 頁每次載入 +1） */
+    private long viewCount = 0;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -165,5 +168,13 @@ public class Place {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public long getViewCount() {
+        return viewCount;
+    }
+
+    public void setViewCount(long viewCount) {
+        this.viewCount = viewCount;
     }
 }

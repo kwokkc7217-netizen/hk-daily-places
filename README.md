@@ -106,3 +106,10 @@ Spring 派 `XSRF-TOKEN` cookie（HttpOnly=false），React 每次 POST/PUT/DELET
 - Body（JSON）：`slug`、`title`、`description`、`category`（HIKING/SHOPPING/MOVIE）必填；`mapQuery`、`youtubeId`、`imageUrl` 選填。成功直接 `PUBLISHED`，回 201；slug 重覆回 409。
 - 每日朝早有個 cron（Muse 排程）research 一個香港好去處（行山／購物／睇戲輪住嚟，電影會 check 當期上映），圖片 URL 逐張 curl 驗過 200 先 publish。
 - 唔經 admin session，所以 CMS 密碼唔使畀 cron；`DAILY_JOB_TOKEN` 淨係 Render env 同 cron job config 有。
+
+## 分頁＋排序＋瀏覽次數＋Bulk Seed
+
+- 列表（`/`、`/category/{name}`）每頁 12 篇：`?page=0&sort=newest`。
+- 排序模式：`newest`（發佈日期新到舊，預設）、`oldest`（舊到新）、`popular`（瀏覽次數高到低）；非法值自動用 `newest`，超範圍頁數自動 clamp 去最後一頁。
+- 詳情頁每次載入 `viewCount +1`（`@Modifying` JPQL，`@Transactional`），影響「最多人睇」排序。
+- Bulk seed：`src/main/resources/seed/bulk-places.json`（200 篇：70 行山／60 購物／70 電影，發佈日期隨機過去 365 日，瀏覽數加權隨機），`seed/BulkSeeder`（`@Order(3)`）用 slug 做 idempotent upsert——重跑唔會重複。圖片全部逐張 curl 驗過 200 先用（Wikimedia／TMDB）；搵唔到可驗證海報嘅電影 `imageUrl` 留空（template 已處理 null）。

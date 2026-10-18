@@ -119,7 +119,8 @@ Spring 派 `XSRF-TOKEN` cookie（HttpOnly=false），React 每次 POST/PUT/DELET
 `/admin` →「數據庫」：phpMyAdmin 式 SQL console，唔使寫 Java 都可以查／改 production DB。
 
 - 限 ADMIN 登入先用到；寫操作（非 SELECT/WITH）執行前會彈 confirm。
-- 一次只准一句 SQL（唔俾用分號串多句）；SELECT/WITH 最多回 500 列。
+- **支援一次貼多句**（例如成份 INSERT dump 做 import）：按分號切開逐句執行，全部包喺同一個 transaction——任何一句失敗就成批 rollback，唔會有 import 一半。切分號嗰陣會避開字串入面（`'a;b'`）、`''` escape、identifier 同 comment 入面嘅分號；唔支援 PostgreSQL dollar-quoting（`$$...$$`，function body 請分開執行）。
+- 每個 SELECT/WITH 最多回 500 列。
 - 有三個 preset：places 頭 10 筆、文章總數、管理員列表（特登只 select 明文欄）。
 - 錯誤只回 DB 訊息，唔回 stack trace。
 - ⚠️ 唔好 `SELECT password_hash`——hash 外洩等於將所有 admin 密碼交出去。

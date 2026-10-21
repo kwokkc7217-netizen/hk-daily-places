@@ -23,6 +23,7 @@
       </a>
       <div class="card-body">
         <span class="badge" th:text="${place.category.displayName}">分類</span>
+        <p class="pubdate" th:if="${place.publishedAt != null}" th:text="${#temporals.format(place.publishedAt, 'yyyy年M月d日')}">日期</p>
         <h2><a th:href="@{/place/{slug}(slug=${place.slug})}" th:text="${place.title}">標題</a></h2>
         <p th:text="${#strings.abbreviate(place.description, 90)}">簡介</p>
       </div>

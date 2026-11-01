@@ -23,7 +23,8 @@ public class Place {
     public enum Category {
         HIKING("行山"),
         SHOPPING("購物"),
-        MOVIE("睇戲");
+        MOVIE("睇戲"),
+        FOOD("食乜嘢？");
 
         private final String displayName;
 

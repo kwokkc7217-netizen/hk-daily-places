@@ -1,7 +1,10 @@
 package com.hkdaily.places.controller;
 
+import com.hkdaily.places.model.MapLocation;
 import com.hkdaily.places.model.Place;
+import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,9 +39,15 @@ public class SiteController {
     private static final String BASE_URL = "https://hk-daily-places.onrender.com";
 
     private final PlaceRepository placeRepository;
+    private final MapLocationRepository mapLocationRepository;
+    private final String googleMapsApiKey;
 
-    public SiteController(PlaceRepository placeRepository) {
+    public SiteController(PlaceRepository placeRepository,
+                          MapLocationRepository mapLocationRepository,
+                          @Value("${GOOGLE_MAPS_API_KEY:}") String googleMapsApiKey) {
         this.placeRepository = placeRepository;
+        this.mapLocationRepository = mapLocationRepository;
+        this.googleMapsApiKey = googleMapsApiKey == null ? "" : googleMapsApiKey.trim();
     }
 
     @GetMapping("/")
@@ -84,6 +95,23 @@ public class SiteController {
         model.addAttribute("place", place);
         model.addAttribute("pageTitle", place.getTitle());
         model.addAttribute("pageDesc", excerpt(place.getDescription(), 150));
+        // 分店：有就畀 detail 頁畫 multi-marker 地圖（齋 list 經緯度，唔經 lazy Place，避免序列化問題）
+        List<MapLocation> locations = mapLocationRepository.findByPlaceIdOrderById(place.getId());
+        model.addAttribute("locations", locations);
+        List<Map<String, Object>> markers = new ArrayList<>();
+        for (MapLocation loc : locations) {
+            if (loc.getLatitude() == null || loc.getLongitude() == null) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", loc.getBranchName());
+            m.put("address", loc.getAddress() == null ? "" : loc.getAddress());
+            m.put("lat", loc.getLatitude());
+            m.put("lng", loc.getLongitude());
+            markers.add(m);
+        }
+        model.addAttribute("markers", markers);
+        model.addAttribute("mapsApiKey", googleMapsApiKey);
         return "detail";
     }
 

@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.format.DateTimeFormatter;
 
 /**
  * 公開頁：首頁 / 分類 / 詳情。
@@ -29,6 +31,7 @@ public class SiteController {
 
     private static final int PAGE_SIZE = 12;
     private static final Set<String> SORT_KEYS = Set.of("newest", "oldest", "popular");
+    private static final String BASE_URL = "https://hk-daily-places.onrender.com";
 
     private final PlaceRepository placeRepository;
 
@@ -88,6 +91,30 @@ public class SiteController {
     @ResponseBody
     public Map<String, String> hello() {
         return Map.of("message", "Hello from hk-daily-places", "service", "java");
+    }
+
+    /**
+     * Sitemap：列出首頁同全部已發佈文章，畀 Google Search Console 逐篇收錄。
+     * 每日 cron 出新文章會自動出現喺度，唔使人手更新。
+     */
+    @GetMapping(value = "/sitemap.xml", produces = "application/xml")
+    @ResponseBody
+    public String sitemap() {
+        List<Place> places = placeRepository.findByStatusOrderByPublishedAtDesc(Place.Status.PUBLISHED);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        sb.append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        sb.append("  <url><loc>").append(BASE_URL).append("/</loc><changefreq>daily</changefreq></url>\n");
+        for (Place p : places) {
+            sb.append("  <url><loc>").append(BASE_URL).append("/place/").append(p.getSlug()).append("</loc>");
+            if (p.getPublishedAt() != null) {
+                sb.append("<lastmod>").append(p.getPublishedAt().format(fmt)).append("</lastmod>");
+            }
+            sb.append("<changefreq>weekly</changefreq></url>\n");
+        }
+        sb.append("</urlset>");
+        return sb.toString();
     }
 
     /** 分頁查詢：sort 非法就用 newest；page 超出範圍就 clamp 去最後一頁。 */

@@ -24,7 +24,7 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
-                .requestMatchers("/", "/place/**", "/category/**", "/api/hello", "/ads.txt", "/error").permitAll()
+                .requestMatchers("/", "/place/**", "/category/**", "/api/hello", "/ads.txt", "/robots.txt", "/sitemap.xml", "/error").permitAll()
                 // Phase 3：每日 cron 內部 API（controller 入面再用 DAILY_JOB_TOKEN 驗）
                 .requestMatchers("/api/internal/**").permitAll()
                 .requestMatchers("/admin/**").permitAll()

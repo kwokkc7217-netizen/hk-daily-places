@@ -7,6 +7,16 @@
   <meta name="google-adsense-account" content="ca-pub-4257803181954368">
   <title th:text="(${pageTitle} ?: '首頁') + '｜每日香港好去處'">每日香港好去處</title>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4257803181954368" crossorigin="anonymous"></script>
+  <!-- GA4：GA4_MEASUREMENT_ID 未設就不輸出，唔影響頁面同 AdSense 審批 -->
+  <th:block th:if="${ga4Id != null and !#strings.isEmpty(ga4Id)}">
+    <script async th:src="@{'https://www.googletagmanager.com/gtag/js?id=' + ${ga4Id}}"></script>
+    <script th:inline="javascript">
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', /*[[${ga4Id}]]*/ 'G-PLACEHOLDER');
+    </script>
+  </th:block>
   <style>
     * { box-sizing: border-box; }
     body { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", system-ui, sans-serif; margin: 0; color: #222; line-height: 1.75; background: #fafafa; }

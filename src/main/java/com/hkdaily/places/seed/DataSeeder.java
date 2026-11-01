@@ -32,10 +32,14 @@ public class DataSeeder implements CommandLineRunner {
             placeRepository.save(seed);
             return;
         }
-        // 已存在：更新圖片（同埋補返冇嘅欄），唔郁其他內容
+        // 已存在：更新圖片同 YouTube guide（同埋補返冇嘅欄），唔郁其他內容
         boolean changed = false;
         if (!seed.getImageUrl().equals(existing.getImageUrl())) {
             existing.setImageUrl(seed.getImageUrl());
+            changed = true;
+        }
+        if (!java.util.Objects.equals(seed.getYoutubeId(), existing.getYoutubeId())) {
+            existing.setYoutubeId(seed.getYoutubeId());
             changed = true;
         }
         if (changed) {
@@ -55,6 +59,7 @@ public class DataSeeder implements CommandLineRunner {
                         + "交通：喺港鐵筲箕灣站轉乘 9 號巴士，土地灣下車即係起點；終點大浪灣有小巴同巴士返筲箕灣。秋冬係最佳季節，天清氣朗；夏天記得帶夠水、做足防曬，避開正午出發。\n\n"
                         + "裝備建議：行山鞋、至少 1.5 公升水、帽、毛巾。山上無補給，垃圾自己帶走，做個負責任嘅山友。");
         p.setMapQuery("龍脊, 香港");
+        p.setYoutubeId("yNxtnJJlhzk"); // 粵語龍脊行山 guide（YouTube，2026-11-01 驗證）
         p.setImageUrl("https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/Dragon%27s_Back_-_Trail_Start%2C_Hong_Kong_%28Unsplash%29.jpg/960px-Dragon%27s_Back_-_Trail_Start%2C_Hong_Kong_%28Unsplash%29.jpg");
         p.setPublishedAt(LocalDateTime.now());
         return p;

@@ -1,0 +1,306 @@
+{
+  "ichiran-ramen": {
+    "branches": [
+      {
+        "address": "九龍尖沙咀棉登徑8號地庫B舖及地下入口大堂",
+        "branchName": "尖沙咀店",
+        "latitude": 22.2967,
+        "longitude": 114.1737,
+        "note": "現時營業時間 9:00-翌日 04:00"
+      },
+      {
+        "address": "九龍旺角洗衣街88號(碧薈飯店G樓B舖)",
+        "branchName": "旺角店",
+        "latitude": 22.3193,
+        "longitude": 114.1719,
+        "note": "現時營業時間 9:00-翌日 05:00"
+      },
+      {
+        "address": "香港銅鑼灣謝斐道440號駱克大廈A座地下F-G鋪",
+        "branchName": "銅鑼灣店",
+        "latitude": 22.2805,
+        "longitude": 114.1814,
+        "note": "2026年9月13日起暫停營業全面升級裝修，預計2026年12月初重開"
+      }
+    ],
+    "description": "2013年登陸銅鑼灣嗰陣全城瘋狂，日日排長龍。最出名係佢嘅「味集中Counter」——每個位都有隔板圍住，前面塊簾一拉埋，就係你同碗拉麵嘅二人世界，乜都唔使理，專心食麵。落單用張口味選擇單，湯嘅濃淡、麵嘅軟硬度、蒜泥份量、蔥嘅種類、赤紅秘製辣醬要幾多倍，全部你話事。招牌天然豚骨湯拉麵基本碗約九十五至九十八蚊，湯底濃得嚟有膠質，幼麵掛湯一流；加溏心蛋、紫菜、黑木耳要逐樣計，人均隨時過百二。甜品記得試抹茶杏仁豆腐。尖沙咀同旺角分店開到凌晨四、五點，宵夜一流。注意銅鑼灣店由2026年9月起裝修，預計12月初先重開。想避開人潮，避開正餐時間，深夜通常唔使等。",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/Ichiran_Ramen_at_Causeway_Bay_%2820181030141222%29.jpg/960px-Ichiran_Ramen_at_Causeway_Bay_%2820181030141222%29.jpg",
+    "mapQuery": "一蘭拉麵 尖沙咀",
+    "title": "一蘭拉麵：福岡名店，味集中 Counter 食豚骨拉麵",
+    "videoChannel": "McFatty 麥花田",
+    "videoTitle": "📍一蘭拉麵 親身飛去日本試過 之後返香港再試 究竟個分別有幾大？Ep513",
+    "youtubeId": "m2LCAn7VyJI"
+  },
+  "tim-ho-wan": {
+    "branches": [
+      {
+        "address": "九龍尖沙咀河內道18號K11購物藝術館1樓119號舖",
+        "branchName": "K11 購物藝術館店",
+        "latitude": 22.297691,
+        "longitude": 114.174025
+      },
+      {
+        "address": "九龍新蒲崗太子道東638號MIKIKI地下G11號舖",
+        "branchName": "Mikiki店",
+        "latitude": 22.333596,
+        "longitude": 114.196922
+      },
+      {
+        "address": "中環香港機鐵總站1樓12A & 12B舖",
+        "branchName": "中環店",
+        "latitude": 22.284098,
+        "longitude": 114.15892
+      },
+      {
+        "address": "新界元朗朗日路9號形點I第二層2023-2027號鋪",
+        "branchName": "元朗店",
+        "latitude": 22.445435,
+        "longitude": 114.035067
+      },
+      {
+        "address": "香港太古城太古城道26號金殿台漢宮閣地下G410-411鋪",
+        "branchName": "太古城店",
+        "latitude": 22.286304,
+        "longitude": 114.217346
+      },
+      {
+        "address": "九龍旺角海庭道18號奧海城2期地下G72A-C舖",
+        "branchName": "奧海城店",
+        "latitude": 22.319143,
+        "longitude": 114.158457
+      },
+      {
+        "address": "將軍澳寶林欣景路8號新都城中心二期商場地下603號舖",
+        "branchName": "將軍澳店",
+        "latitude": 22.323249,
+        "longitude": 114.258196
+      },
+      {
+        "address": "新界屯門屯盛街1號屯門市廣場1期1樓1101-1102鋪",
+        "branchName": "屯門市廣場店",
+        "latitude": 22.394122,
+        "longitude": 113.976241
+      },
+      {
+        "address": "離島大嶼山東涌達東路18-20號東薈城3樓332鋪",
+        "branchName": "東涌店",
+        "latitude": 22.290272,
+        "longitude": 113.940257
+      },
+      {
+        "address": "新界沙田沙田正街18-19號新城市廣場一期4樓455號舖",
+        "branchName": "沙田店",
+        "latitude": 22.381136,
+        "longitude": 114.188373
+      },
+      {
+        "address": "九龍深水埗福榮街9-11號嘉匯大廈地下及閣樓",
+        "branchName": "深水埗店",
+        "latitude": 22.333756,
+        "longitude": 114.160439
+      },
+      {
+        "address": "新界荃灣大壩街4-30號荃灣廣場2樓245-247鋪",
+        "branchName": "荃灣廣場店",
+        "latitude": 22.370844,
+        "longitude": 114.111294
+      },
+      {
+        "address": "尖沙咀柯士甸道西3號高鐵香港西九龍站B1M夾層1號鋪",
+        "branchName": "西九龍站店",
+        "latitude": 22.303681,
+        "longitude": 114.164927
+      },
+      {
+        "address": "香港銅鑼灣恩平道28號利園二期地下底層LG02-08號鋪",
+        "branchName": "銅鑼灣店",
+        "latitude": 22.278672,
+        "longitude": 114.185604
+      }
+    ],
+    "description": "「平民米芝蓮」三個字，香港人諗起第一間就係添好運。2009年由前龍景軒點心主管麥桂培師傅開檔，主打即叫即蒸，開業唔夠一年就摘米芝蓮一星，被譽為「全球最平嘅星級食府」，之後連續多年獲米芝蓮肯定。招牌酥皮叉燒包（又叫雪山叉燒包）係鎮店之寶：外層酥皮脆到有聲，裡面叉燒餡甜甜地，第一啖已經好驚艷，好多同業都爭相仿效。其他必點：潮州蒸粉果皮薄餡靚、鮮蝦腐皮卷脆卜卜、豉汁蒸鳳爪、鮮蝦燒賣皇，甜品可以試桂花糕。價錢好貼地，大部分點心$38–$48左右，一個人百零蚊已經食到好滿足，遊客同本地人都會不斷回頭。唯一要預嘅就係排隊，午市同假日好誇張；想唔使等就揀朝早8點頭輪、下午茶時段，或者夜晚8點後嘅晚市，基本上都唔使點排。2024年品牌由快樂蜂（Jollibee）全資收購，有老食客話味道唔同咗，但以平民價食到即叫即蒸嘅米芝蓮級點心，依然係香港飲茶界嘅入門必修課。",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/Tim_Ho_Wan%2C_the_Dim-Sum_Specialists%2C_Sham_Shui_Po_shop_%28Hong_Kong%29.jpg/1280px-Tim_Ho_Wan%2C_the_Dim-Sum_Specialists%2C_Sham_Shui_Po_shop_%28Hong_Kong%29.jpg",
+    "mapQuery": "添好運 深水埗",
+    "title": "添好運：平民米芝蓮嘅即叫即蒸點心",
+    "videoChannel": "生活DNA",
+    "videoTitle": "添好運x鏞記燒鵝包味道如何？維他奶做甜品？點心試食有乜推介︱屯門嘆夜茶︱屯門美食︱屯門區",
+    "youtubeId": "WuU6B7KLC3E"
+  },
+  "australia-dairy-company": {
+    "branches": [
+      {
+        "address": "香港九龍佐敦白加士街47-49號地舖",
+        "branchName": "佐敦總店",
+        "latitude": 22.3046,
+        "longitude": 114.1706
+      }
+    ],
+    "description": "佐敦白加士街47-49號，1970年開到而家嘅傳奇冰室，坊間簡稱「澳牛」。成個店最出名就係炒蛋——多士烘到外酥內軟，炒蛋炒得鬆軟滑嫩、蛋香十足，仲有蛋治、西多士都係必點。甜品方面，招牌燉奶（熱燉奶、蛋白燉鮮奶）奶香濃郁、白白滑滑，同杏汁燉蛋都係鎮店之寶。早餐套餐火腿通粉加港式奶茶都係穩陣之選。澳牛除咗嘢食，仲有香港獨一無二嘅「快餐文化」：成日大排長龍但隊伍流動快，坐低冇耐侍應就會問你食咩，一坐定落單、半分鐘上菜，伙計手腳快到你唔好意思坐耐，搭檯（拼桌）係常態。貼士：入去之前諗定食乜，因為佢哋唔會等你；食完快快埋單，唔好阻住人做生意。營業時間朝早7:30到夜晚10點，星期四休息，人均約50蚊左右，港鐵佐敦站C2出口行兩分鐘就到。",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/Australia_Dairy_Company_Hong_Kong.jpg/960px-Australia_Dairy_Company_Hong_Kong.jpg",
+    "mapQuery": "澳洲牛奶公司 佐敦",
+    "title": "澳洲牛奶公司：佐敦50年老字號，炒蛋多士＋燉奶朝聖",
+    "videoChannel": "TIK LEE",
+    "videoTitle": "「澳洲牛奶公司」-廣東話-中文字幕cc",
+    "youtubeId": "ebI16MuUbQQ"
+  },
+  "mammy-pancake": {
+    "title": "媽咪雞蛋仔：米芝蓮推介創意雞蛋仔，20幾款口味外脆內軟",
+    "description": "媽咪雞蛋仔由創辦人喺2009年開第一間紅磡黃埔店，初衷係想整返細個食過嘅傳統雞蛋仔味道，研發出「外皮特別脆、入面軟嫩煙韌」嘅口感，一炮而紅，仲由2016年起連續多年攞到米芝蓮街頭小食推介。佢哋最出名係口味夠晒多——原味、紫薯蕃薯、抹茶紅豆、咖啡朱古力、清香檸檬、雙重芝士、芝麻肉鬆，連鹹味都有，成20幾款。必試招牌有伯爵茶朱古力雞蛋仔，用Twinings伯爵茶加粒粒朱古力做餡，趁熱食仲有流心效果；開心果爆醬格仔餅都係人氣王。全部即叫即製，拎上手熱辣辣，外脆內軟；包裝紙袋特登開咗透氣窿，等你行住食都唔會焗腍。價錢方面，原味約$20起，創意口味$40幾蚊，開心果格仔餅$53左右，唔算平但真材實料。繁忙時間要排5至10分鐘，建議避開黃昏同週末下午茶時段。全港有20間分店，港九新界都有，紅磡黃埔創始店、尖沙咀天星碼頭店（望住維港打卡一流）同旺角花園街新店都方便。另外仲有格仔餅同特色飲品，好似媽咪奶茶、荔枝梳打，買埋一齊食就最正。",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/HK_YTM_MK_%E6%97%BA%E8%A7%92_Mong_Kok_%E8%B1%89%E6%B2%B9%E8%A1%97_Soy_Street_night_December_2022_Px3_04.jpg/1280px-HK_YTM_MK_%E6%97%BA%E8%A7%92_Mong_Kok_%E8%B1%89%E6%B2%B9%E8%A1%97_Soy_Street_night_December_2022_Px3_04.jpg",
+    "youtubeId": "67CRtPc8ILs",
+    "videoTitle": "【28Vlog】- 脹卜卜 大大粒 媽咪雞蛋仔 Mammy Pancake【廣東話頻道】吃喝玩樂玩#吃",
+    "videoChannel": "WeAreVRHK",
+    "mapQuery": "媽咪雞蛋仔 紅磡",
+    "branches": [
+      {
+        "branchName": "尖沙咀天星碼頭",
+        "address": "香港尖沙咀梳士巴利道天星碼頭地下KP-13, 29&30舖",
+        "latitude": 22.2935413,
+        "longitude": 114.167987
+      },
+      {
+        "branchName": "旺角花園街",
+        "address": "香港九龍旺角花園街7號地下C及D鋪",
+        "latitude": 22.325699,
+        "longitude": 114.1698196
+      },
+      {
+        "branchName": "MOKO新世紀廣場",
+        "address": "香港旺角太子道西193號MOKO新世紀廣場MTR樓M32號舖",
+        "latitude": 22.3208842,
+        "longitude": 114.1718135
+      },
+      {
+        "branchName": "粉嶺名都",
+        "address": "粉嶺車站路18號名都商場2樓59A舖",
+        "latitude": 22.4905519,
+        "longitude": 114.1413961
+      },
+      {
+        "branchName": "沙田",
+        "address": "沙田港鐵沙田站SHT38號舖",
+        "latitude": 22.3832711,
+        "longitude": 114.1875888
+      },
+      {
+        "branchName": "灣仔修頓",
+        "address": "香港灣仔修頓中心地下D3舖",
+        "latitude": 22.2771321,
+        "longitude": 114.1727947
+      },
+      {
+        "branchName": "北角華匯",
+        "address": "香港北角馬寶道28號華匯中心地下2號舖",
+        "latitude": 22.2920547,
+        "longitude": 114.2015567
+      },
+      {
+        "branchName": "銅鑼灣渣甸街",
+        "address": "香港銅鑼灣渣甸街36號地下5號舖",
+        "latitude": 22.2783587,
+        "longitude": 114.1821064
+      },
+      {
+        "branchName": "九龍灣淘大",
+        "address": "香港九龍灣牛頭角道77號淘大商場第三期G284號舖",
+        "latitude": 22.32407,
+        "longitude": 114.21743
+      },
+      {
+        "branchName": "紅磡黃埔",
+        "address": "香港紅磡船澳街99號黃埔新邨地下1A15舖",
+        "latitude": 22.306144,
+        "longitude": 114.1875835
+      },
+      {
+        "branchName": "佐敦廟街",
+        "address": "香港佐敦廟街219號地下",
+        "latitude": 22.3042299,
+        "longitude": 114.1696932
+      },
+      {
+        "branchName": "元朗元點",
+        "address": "香港元朗朗樂路1號元點1樓B115號舖",
+        "latitude": 22.4456179,
+        "longitude": 114.0334679
+      },
+      {
+        "branchName": "天水圍嘉湖",
+        "address": "香港新界天水圍天恩路12-18號嘉湖一期地下G85C舖",
+        "latitude": 22.4578666,
+        "longitude": 113.9992321
+      },
+      {
+        "branchName": "大圍富嘉花園",
+        "address": "香港大圍美田路16號富嘉花園地下19B號舖",
+        "latitude": 22.376409,
+        "longitude": 114.1752671
+      },
+      {
+        "branchName": "屯門時代廣場",
+        "address": "香港屯門屯隆街2號屯門時代廣場北翼3樓38號鋪",
+        "latitude": 22.3941223,
+        "longitude": 113.9762413
+      },
+      {
+        "branchName": "元朗千色廣場",
+        "address": "香港元朗教育路1號千色廣場地下21號舖",
+        "latitude": 22.4430428,
+        "longitude": 114.0238615
+      },
+      {
+        "branchName": "荃灣昌華大廈",
+        "address": "香港荃灣青山道荃灣段289-301號昌華大廈地下16A號舖",
+        "latitude": 22.3745267,
+        "longitude": 114.1133872
+      },
+      {
+        "branchName": "中環街市",
+        "address": "香港中環皇后大道中93號及德輔道中80號中環街市2樓242B舖",
+        "latitude": 22.2839703,
+        "longitude": 114.1551489
+      },
+      {
+        "branchName": "上環文咸東街",
+        "address": "香港上環文咸東街32號地下",
+        "latitude": 22.2865436,
+        "longitude": 114.1500412
+      },
+      {
+        "branchName": "尖沙咀東新文華中心",
+        "address": "香港尖沙咀東科學館道14號新文華中心地下16號舖",
+        "latitude": 22.302104,
+        "longitude": 114.177983
+      }
+    ]
+  },
+  "kai-kai-dessert": {
+    "branches": [
+      {
+        "address": "九龍佐敦白加士街113-115號地舖",
+        "branchName": "佳佳甜品 佐敦總店",
+        "latitude": 22.3067462,
+        "longitude": 114.1709729
+      },
+      {
+        "address": "旺角花園街1號地下2號舖",
+        "branchName": "佳佳甜品 旺角分店",
+        "latitude": 22.3165886,
+        "longitude": 114.1717554
+      },
+      {
+        "address": "香港銅鑼灣駱克道472號地舖",
+        "branchName": "佳佳甜品 銅鑼灣分店",
+        "latitude": 22.280643,
+        "longitude": 114.1835492
+      }
+    ],
+    "description": "講起香港傳統糖水，點可以唔提佐敦嘅佳佳甜品？1979年開業，40幾年老字號，連續多年拎到米芝蓮街頭小食推介，連發哥周潤發都係忠實fans，絕對係香港糖水界嘅傳奇。招牌「佳佳三寶」——石磨芝麻糊、合桃露、杏仁露，全部堅持人手炒芝麻、石磨研磨，磨到啖啖香滑、幼滑到冇渣，芝麻味濃得嚟又唔死甜。內行人都係咁嗌：芝麻糊加三粒湯圓（加$5有三粒），又或者核桃露拼芝麻糊，層次感勁啲。其他必試仲有楊枝甘露（芒果足料，常常賣晒）、芋茸蓮子西米露、薑汁寧波湯圓、冰花燉雞蛋、白果薏米腐竹同木瓜燉雪耳，大部分糖水都分凍熱，大碗夾細碗，價錢好親民，大多二、三十蚊左右就有交易。留意返，舊佐敦總店（寧波街29號）喺2025年9月17號結業，新總店搬咗去白加士街113-115號，銅鑼灣同旺角亦有分店，夜晚8、9點之後經常要排隊，唔想等嘅避開晚間高峰，或者早啲去；三間分店都開到深夜（佐敦、旺角到凌晨1點，銅鑼灣到半夜12點半），晚餐後散步過去食碗糖水，正呀！",
+    "imageUrl": null,
+    "mapQuery": "佳佳甜品 佐敦",
+    "title": "佳佳甜品：40幾年米芝蓮老字號，手打石磨芝麻糊係招牌",
+    "videoChannel": "港式Culture",
+    "videoTitle": "逾40年糖水老店佳佳甜品 旺角首開分店 ⭐️連續9年米芝蓮推介 核桃露石磨芝麻糊都好細滑🫕試埋濃濃薑汁嘅寧波湯圓 有8粒咁多嫁～#多多 #佳佳 #糖水｜〖#港式culture〗",
+    "youtubeId": "VKpnuMHiCQc"
+  }
+}

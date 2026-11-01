@@ -78,6 +78,22 @@ export function deletePlace(id) {
   return api('/api/admin/places/' + id, { method: 'DELETE' })
 }
 
+export const listLocations = (placeId) => api('/api/admin/places/' + placeId + '/locations')
+
+export function saveLocation(placeId, loc) {
+  if (loc.id) {
+    return api('/api/admin/places/' + placeId + '/locations/' + loc.id, {
+      method: 'PUT',
+      body: loc,
+    })
+  }
+  return api('/api/admin/places/' + placeId + '/locations', { method: 'POST', body: loc })
+}
+
+export function deleteLocation(placeId, locId) {
+  return api('/api/admin/places/' + placeId + '/locations/' + locId, { method: 'DELETE' })
+}
+
 export function uploadImage(file) {
   const form = new FormData()
   form.append('file', file)

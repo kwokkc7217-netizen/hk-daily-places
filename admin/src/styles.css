@@ -125,3 +125,33 @@ button.danger { background: #c0392b; }
   margin: 8px 0;
   border: 1px solid #ddd;
 }
+.locations {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  background: #fafafa;
+}
+.locations h3 { margin: 0 0 4px; }
+.hint { color: #666; font-size: 0.9em; }
+.loc-list { list-style: none; padding: 0; }
+.loc-list li {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 6px 0;
+}
+.loc-list .coords { color: #666; font-size: 0.85em; }
+.loc-list button { margin-left: 8px; }
+.loc-form { margin-top: 12px; }
+.loc-form h4 { margin: 0 0 8px; }
+.loc-form label { display: block; margin: 6px 0; }
+.loc-form input {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}

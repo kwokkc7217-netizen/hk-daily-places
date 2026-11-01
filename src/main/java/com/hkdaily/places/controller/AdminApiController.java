@@ -1,8 +1,10 @@
 package com.hkdaily.places.controller;
 
 import com.hkdaily.places.model.AdminUser;
+import com.hkdaily.places.model.MapLocation;
 import com.hkdaily.places.model.Place;
 import com.hkdaily.places.repository.AdminUserRepository;
+import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
 import com.hkdaily.places.service.CloudinaryService;
 import org.springframework.data.domain.Sort;
@@ -35,15 +37,18 @@ import java.util.Map;
 public class AdminApiController {
 
     private final PlaceRepository placeRepository;
+    private final MapLocationRepository mapLocationRepository;
     private final CloudinaryService cloudinaryService;
     private final AdminUserRepository adminUserRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AdminApiController(PlaceRepository placeRepository,
+                              MapLocationRepository mapLocationRepository,
                               CloudinaryService cloudinaryService,
                               AdminUserRepository adminUserRepository,
                               PasswordEncoder passwordEncoder) {
         this.placeRepository = placeRepository;
+        this.mapLocationRepository = mapLocationRepository;
         this.cloudinaryService = cloudinaryService;
         this.adminUserRepository = adminUserRepository;
         this.passwordEncoder = passwordEncoder;
@@ -94,8 +99,86 @@ public class AdminApiController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         Place place = placeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        mapLocationRepository.deleteByPlaceId(id);
         placeRepository.delete(place);
         return ResponseEntity.noContent().build();
+    }
+
+    // ================= 分店（map_locations）管理 =================
+
+    /** 某篇文章嘅全部分店 */
+    @GetMapping("/places/{id}/locations")
+    public List<MapLocation> listLocations(@PathVariable Long id) {
+        assertPlaceExists(id);
+        return mapLocationRepository.findByPlaceIdOrderById(id);
+    }
+
+    /** 加分店：branchName＋latitude＋longitude 必填 */
+    @PostMapping("/places/{id}/locations")
+    public ResponseEntity<?> addLocation(@PathVariable Long id, @RequestBody MapLocation input) {
+        Place place = placeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        ResponseEntity<?> bad = checkLocation(input);
+        if (bad != null) {
+            return bad;
+        }
+        MapLocation loc = new MapLocation();
+        loc.setPlace(place);
+        copyLocationInto(loc, input);
+        return ResponseEntity.status(HttpStatus.CREATED).body(mapLocationRepository.save(loc));
+    }
+
+    /** 改分店 */
+    @PutMapping("/places/{id}/locations/{locId}")
+    public ResponseEntity<?> updateLocation(@PathVariable Long id, @PathVariable Long locId,
+                                            @RequestBody MapLocation input) {
+        MapLocation loc = findLocationOf(id, locId);
+        ResponseEntity<?> bad = checkLocation(input);
+        if (bad != null) {
+            return bad;
+        }
+        copyLocationInto(loc, input);
+        return ResponseEntity.ok(mapLocationRepository.save(loc));
+    }
+
+    /** 刪分店 */
+    @DeleteMapping("/places/{id}/locations/{locId}")
+    public ResponseEntity<Void> deleteLocation(@PathVariable Long id, @PathVariable Long locId) {
+        MapLocation loc = findLocationOf(id, locId);
+        mapLocationRepository.delete(loc);
+        return ResponseEntity.noContent().build();
+    }
+
+    private void assertPlaceExists(Long id) {
+        if (!placeRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    private MapLocation findLocationOf(Long placeId, Long locId) {
+        assertPlaceExists(placeId);
+        MapLocation loc = mapLocationRepository.findById(locId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!loc.getPlace().getId().equals(placeId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        return loc;
+    }
+
+    private ResponseEntity<?> checkLocation(MapLocation input) {
+        if (input == null || input.getBranchName() == null || input.getBranchName().isBlank()
+                || input.getLatitude() == null || input.getLongitude() == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "branchName + latitude + longitude required"));
+        }
+        return null;
+    }
+
+    private void copyLocationInto(MapLocation target, MapLocation input) {
+        target.setBranchName(input.getBranchName().strip());
+        target.setAddress(input.getAddress());
+        target.setLatitude(input.getLatitude());
+        target.setLongitude(input.getLongitude());
     }
 
     /** 圖片上傳去 Cloudinary；冇設 CLOUDINARY_URL 就回 503 */

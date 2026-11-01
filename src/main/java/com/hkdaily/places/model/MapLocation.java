@@ -1,5 +1,6 @@
 package com.hkdaily.places.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -48,6 +49,8 @@ public class MapLocation {
         this.id = id;
     }
 
+    /** JSON 唔好 serialize 個 lazy Place（會炒 LazyInitializationException）。 */
+    @JsonIgnore
     public Place getPlace() {
         return place;
     }

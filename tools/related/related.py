@@ -24,7 +24,7 @@ import psycopg2
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-MIN_SCORE = 0.10   # below this, a "related" article is not shown (tune after first real run)
+MIN_SCORE = 0.06   # below this, a "related" article is not shown (tune after first real run)
 TOP_N = 5
 
 # Category display names, prepended to the corpus so same-category articles
@@ -35,7 +35,7 @@ CATEGORY_NAMES = {
     "MOVIE": "睇戲",
     "FOOD": "食乜嘢",
 }
-CATEGORY_BOOST_REPEAT = 2
+CATEGORY_BOOST_REPEAT = 4
 
 
 def load_articles(conn):

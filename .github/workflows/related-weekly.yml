@@ -1,0 +1,21 @@
+name: related-places-weekly
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 02:00 UTC = 10:00 HKT
+  workflow_dispatch:
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install scikit-learn psycopg2-binary
+      - name: Compute related articles
+        run: python tools/related/related.py --write
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}

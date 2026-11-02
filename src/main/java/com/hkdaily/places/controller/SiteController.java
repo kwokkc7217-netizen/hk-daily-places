@@ -4,6 +4,7 @@ import com.hkdaily.places.model.MapLocation;
 import com.hkdaily.places.model.Place;
 import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
+import com.hkdaily.places.service.PlaceSearchService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -40,13 +41,16 @@ public class SiteController {
 
     private final PlaceRepository placeRepository;
     private final MapLocationRepository mapLocationRepository;
+    private final PlaceSearchService searchService;
     private final String googleMapsApiKey;
 
     public SiteController(PlaceRepository placeRepository,
                           MapLocationRepository mapLocationRepository,
+                          PlaceSearchService searchService,
                           @Value("${GOOGLE_MAPS_API_KEY:}") String googleMapsApiKey) {
         this.placeRepository = placeRepository;
         this.mapLocationRepository = mapLocationRepository;
+        this.searchService = searchService;
         this.googleMapsApiKey = googleMapsApiKey == null ? "" : googleMapsApiKey.trim();
     }
 
@@ -119,6 +123,23 @@ public class SiteController {
     @ResponseBody
     public Map<String, String> hello() {
         return Map.of("message", "Hello from hk-daily-places", "service", "java");
+    }
+
+    /**
+     * 站內搜尋：NoSQL（MongoDB Atlas Search）正選，失敗跌返 Postgres。
+     * 最少 2 個字；結果按 relevance 排序（Mongo）或 publish 日期（fallback）。
+     */
+    @GetMapping("/search")
+    public String search(@RequestParam(value = "q", required = false) String q, Model model) {
+        String query = q == null ? "" : q.strip();
+        List<PlaceSearchService.SearchHit> results = List.of();
+        if (query.length() >= 2) {
+            results = searchService.search(query);
+        }
+        model.addAttribute("q", query);
+        model.addAttribute("results", results);
+        model.addAttribute("pageTitle", query.isEmpty() ? "搜尋" : "搜尋：" + query);
+        return "search";
     }
 
     /**

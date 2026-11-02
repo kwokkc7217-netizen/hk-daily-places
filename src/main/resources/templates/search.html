@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+<div th:replace="~{layout :: adTop}"></div>
+<main class="wrap">
+  <section class="hero">
+    <h1>搜尋好去處</h1>
+    <form class="searchform" action="/search" method="get">
+      <input type="search" name="q" placeholder="例如：拉麵、行山、太古…" th:value="${q}" minlength="2" required>
+      <button type="submit">搜尋</button>
+    </form>
+    <p th:if="${not #strings.isEmpty(q)}">
+      「<span th:text="${q}">關鍵字</span>」搵到 <span th:text="${results.size()}">0</span> 個結果
+      <span th:if="${q.length() < 2}">（最少輸入 2 個字）</span>
+    </p>
+  </section>
+
+  <p class="state" th:if="${not #strings.isEmpty(q) and q.length() >= 2 and results.empty}">
+    冇相關結果，試下其他關鍵字。
+  </p>
+
+  <section class="cards" th:if="${not results.empty}">
+    <article class="card" th:each="hit : ${results}">
+      <div class="card-body">
+        <span class="badge" th:text="${hit.categoryDisplay}">分類</span>
+        <h2><a th:href="@{/place/{slug}(slug=${hit.slug})}" th:text="${hit.title}">標題</a></h2>
+        <p th:text="${#strings.abbreviate(hit.description, 90)}">簡介</p>
+      </div>
+    </article>
+  </section>
+</main>
+<div th:replace="~{layout :: footer}"></div>
+</body>
+</html>

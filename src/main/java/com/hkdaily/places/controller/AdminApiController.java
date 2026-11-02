@@ -6,6 +6,7 @@ import com.hkdaily.places.model.Place;
 import com.hkdaily.places.repository.AdminUserRepository;
 import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
+import com.hkdaily.places.service.PlaceSearchService;
 import com.hkdaily.places.service.CloudinaryService;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -41,17 +42,20 @@ public class AdminApiController {
     private final CloudinaryService cloudinaryService;
     private final AdminUserRepository adminUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PlaceSearchService searchService;
 
     public AdminApiController(PlaceRepository placeRepository,
                               MapLocationRepository mapLocationRepository,
                               CloudinaryService cloudinaryService,
                               AdminUserRepository adminUserRepository,
-                              PasswordEncoder passwordEncoder) {
+                              PasswordEncoder passwordEncoder,
+                              PlaceSearchService searchService) {
         this.placeRepository = placeRepository;
         this.mapLocationRepository = mapLocationRepository;
         this.cloudinaryService = cloudinaryService;
         this.adminUserRepository = adminUserRepository;
         this.passwordEncoder = passwordEncoder;
+        this.searchService = searchService;
     }
 
     /** 對外嘅管理員資料——永遠唔包 passwordHash。 */
@@ -83,7 +87,9 @@ public class AdminApiController {
     public Place create(@RequestBody Place input) {
         Place place = copyInto(new Place(), input);
         stampPublishedAt(place);
-        return placeRepository.save(place);
+        Place saved = placeRepository.save(place);
+        searchService.indexPlace(saved);
+        return saved;
     }
 
     @PutMapping("/places/{id}")
@@ -92,7 +98,9 @@ public class AdminApiController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         copyInto(place, input);
         stampPublishedAt(place);
-        return placeRepository.save(place);
+        Place saved = placeRepository.save(place);
+        searchService.indexPlace(saved);
+        return saved;
     }
 
     @DeleteMapping("/places/{id}")
@@ -101,6 +109,7 @@ public class AdminApiController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         mapLocationRepository.deleteByPlaceId(id);
         placeRepository.delete(place);
+        searchService.removeFromIndex(place.getSlug());
         return ResponseEntity.noContent().build();
     }
 

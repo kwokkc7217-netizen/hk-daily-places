@@ -4,6 +4,7 @@ import com.hkdaily.places.model.MapLocation;
 import com.hkdaily.places.model.Place;
 import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
+import com.hkdaily.places.service.PlaceSearchService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,13 +38,16 @@ public class InternalJobController {
 
     private final PlaceRepository placeRepository;
     private final MapLocationRepository mapLocationRepository;
+    private final PlaceSearchService searchService;
     private final String jobToken;
 
     public InternalJobController(PlaceRepository placeRepository,
                                  MapLocationRepository mapLocationRepository,
+                                 PlaceSearchService searchService,
                                  @Value("${DAILY_JOB_TOKEN:}") String jobToken) {
         this.placeRepository = placeRepository;
         this.mapLocationRepository = mapLocationRepository;
+        this.searchService = searchService;
         this.jobToken = jobToken;
     }
 
@@ -115,6 +119,7 @@ public class InternalJobController {
         place.setImageUrl(input.imageUrl);
         place.setPublishedAt(LocalDateTime.now());
         Place saved = placeRepository.save(place);
+        searchService.indexPlace(saved);
         if (input.branches != null) {
             for (BranchDto b : input.branches) {
                 MapLocation loc = new MapLocation();

@@ -28,4 +28,13 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Modifying
     @Query("UPDATE Place p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    /** Fallback search：Mongo 冇開／斷線嗰陣用。標題＋內文 ILIKE substring。 */
+    @Query("SELECT p FROM Place p WHERE p.status = :status"
+            + " AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :q, '%'))"
+            + " OR LOWER(p.description) LIKE LOWER(CONCAT('%', :q, '%')))"
+            + " ORDER BY p.publishedAt DESC")
+    List<Place> searchPublished(@Param("status") Place.Status status,
+                                @Param("q") String q,
+                                Pageable pageable);
 }

@@ -2,7 +2,7 @@ name: related-places-weekly
 
 on:
   schedule:
-    - cron: '0 2 * * 0'  # Sunday 02:00 UTC = 10:00 HKT
+    - cron: '0 2 * * *'  # every day 02:00 UTC = 10:00 HKT
   workflow_dispatch:
 
 jobs:

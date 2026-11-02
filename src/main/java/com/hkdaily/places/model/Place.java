@@ -73,6 +73,13 @@ public class Place {
     @Column(columnDefinition = "TEXT")
     private String imageUrl;
 
+    /**
+     * 「你可能都鍾意」：Python recommender（tools/related/related.py，GitHub Action 每週跑）
+     * 寫入嘅 related slugs JSON array，例如 ["slug-a","slug-b"]。可空，未計到就冇。
+     */
+    @Column(columnDefinition = "TEXT")
+    private String relatedSlugs;
+
     private LocalDateTime publishedAt;
 
     private LocalDateTime createdAt;
@@ -158,6 +165,14 @@ public class Place {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public String getRelatedSlugs() {
+        return relatedSlugs;
+    }
+
+    public void setRelatedSlugs(String relatedSlugs) {
+        this.relatedSlugs = relatedSlugs;
     }
 
     public LocalDateTime getPublishedAt() {

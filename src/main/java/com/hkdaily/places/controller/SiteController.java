@@ -5,6 +5,8 @@ import com.hkdaily.places.model.Place;
 import com.hkdaily.places.repository.MapLocationRepository;
 import com.hkdaily.places.repository.PlaceRepository;
 import com.hkdaily.places.service.PlaceSearchService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -116,6 +118,22 @@ public class SiteController {
         }
         model.addAttribute("markers", markers);
         model.addAttribute("mapsApiKey", googleMapsApiKey);
+        // 相關推薦：Python recommender 寫入 related_slugs（JSON array of slugs），轉返做 Place 俾 template 畫。
+        // JSON 壞咗／未計到就當冇，唔好整死成頁。
+        List<Place> relatedPlaces = new ArrayList<>();
+        if (place.getRelatedSlugs() != null && !place.getRelatedSlugs().isBlank()) {
+            try {
+                List<String> slugs = new ObjectMapper().readValue(place.getRelatedSlugs(), new TypeReference<List<String>>() {});
+                for (String s : slugs) {
+                    placeRepository.findBySlugAndStatus(s, Place.Status.PUBLISHED).ifPresent(relatedPlaces::add);
+                    if (relatedPlaces.size() >= 5) {
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        model.addAttribute("relatedPlaces", relatedPlaces);
         return "detail";
     }
 

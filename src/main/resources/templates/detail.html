@@ -68,6 +68,16 @@
       </div>
     </div>
 
+    <div th:if="${not #lists.isEmpty(relatedPlaces)}">
+      <h2 class="section">你可能都鍾意</h2>
+      <ul class="related">
+        <li th:each="rel : ${relatedPlaces}">
+          <a th:href="@{/place/{slug}(slug=${rel.slug})}" th:text="${rel.title}">標題</a>
+          <span class="badge" th:text="${rel.category.displayName}">分類</span>
+        </li>
+      </ul>
+    </div>
+
     <p class="back"><a th:href="@{/category/{name}(name=${#strings.toLowerCase(place.category.name())})}">← 更多<span th:text="${place.category.displayName}">分類</span>好去處</a></p>
   </article>
 </main>

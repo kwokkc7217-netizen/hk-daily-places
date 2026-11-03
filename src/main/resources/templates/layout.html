@@ -7,6 +7,8 @@
   <meta name="google-adsense-account" content="ca-pub-4257803181954368">
   <meta name="google-site-verification" content="oCNz2EhszGAICA7NkP9zbCwJBvzLSqNJ56Nzc86qCRg" />
   <title th:text="(${pageTitle} ?: '首頁') + '｜每日香港好去處'">每日香港好去處</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4257803181954368" crossorigin="anonymous"></script>
   <!-- GA4：GA4_MEASUREMENT_ID 未設就不輸出，唔影響頁面同 AdSense 審批 -->
   <th:block th:if="${ga4Id != null and !#strings.isEmpty(ga4Id)}">

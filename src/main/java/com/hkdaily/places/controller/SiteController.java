@@ -7,6 +7,7 @@ import com.hkdaily.places.repository.PlaceRepository;
 import com.hkdaily.places.service.PlaceSearchService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,7 +40,6 @@ public class SiteController {
 
     private static final int PAGE_SIZE = 12;
     private static final Set<String> SORT_KEYS = Set.of("newest", "oldest", "popular");
-    private static final String BASE_URL = "https://hk-daily-places.onrender.com";
 
     private final PlaceRepository placeRepository;
     private final MapLocationRepository mapLocationRepository;
@@ -166,15 +166,20 @@ public class SiteController {
      */
     @GetMapping(value = "/sitemap.xml", produces = "application/xml")
     @ResponseBody
-    public String sitemap() {
+    public String sitemap(HttpServletRequest request) {
+        // Base URL follows the request host so the same deployment serves
+        // correct absolute URLs on every domain (onrender.com, duckdns.org, hkdailyplaces.win).
+        // The app always sits behind a TLS-terminating proxy (Render / nginx),
+        // so https is correct here.
+        String baseUrl = "https://" + request.getServerName();
         List<Place> places = placeRepository.findByStatusOrderByPublishedAtDesc(Place.Status.PUBLISHED);
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         sb.append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
-        sb.append("  <url><loc>").append(BASE_URL).append("/</loc><changefreq>daily</changefreq></url>\n");
+        sb.append("  <url><loc>").append(baseUrl).append("/</loc><changefreq>daily</changefreq></url>\n");
         for (Place p : places) {
-            sb.append("  <url><loc>").append(BASE_URL).append("/place/").append(p.getSlug()).append("</loc>");
+            sb.append("  <url><loc>").append(baseUrl).append("/place/").append(p.getSlug()).append("</loc>");
             if (p.getPublishedAt() != null) {
                 sb.append("<lastmod>").append(p.getPublishedAt().format(fmt)).append("</lastmod>");
             }
@@ -182,6 +187,14 @@ public class SiteController {
         }
         sb.append("</urlset>");
         return sb.toString();
+    }
+
+    @GetMapping(value = "/robots.txt", produces = "text/plain")
+    @ResponseBody
+    public String robots(HttpServletRequest request) {
+        // Same host-aware base URL as sitemap() so the Sitemap hint is correct on every domain.
+        String baseUrl = "https://" + request.getServerName();
+        return "User-agent: *\nAllow: /\n\nSitemap: " + baseUrl + "/sitemap.xml\n";
     }
 
     /** 分頁查詢：sort 非法就用 newest；page 超出範圍就 clamp 去最後一頁。 */

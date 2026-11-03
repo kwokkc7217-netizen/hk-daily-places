@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://hk-daily-places.onrender.com/sitemap.xml

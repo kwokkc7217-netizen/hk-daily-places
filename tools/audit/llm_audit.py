@@ -513,7 +513,12 @@ def score_article_llm(article, api_key, model, mock=False):
             return (scores, round(sum(scores.values()) * 2.5, 1),
                     verdict, reasons, None)
         except (ValueError, json.JSONDecodeError) as e:
-            last_error = f"invalid model output: {e}"
+            # Keep a short excerpt of the raw reply in the error, so a
+            # failed post can be diagnosed from the report/log — the
+            # full reply is not stored anywhere else. Article content
+            # is public, so logging it is fine.
+            last_error = (f"invalid model output: {e} "
+                          f"(raw reply: {text[:300]!r})")
     return None, None, None, None, last_error
 
 

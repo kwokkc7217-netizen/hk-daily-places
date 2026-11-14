@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-LLM qualitative audit for hk-daily-places — Gemini API scoring.
+LLM qualitative audit for hk-daily-places — Gemini + Groq API scoring
+(alternating, one call each).
 
 Scores each PUBLISHED article on the four qualitative criteria from the
 24-article sample (see the sample report):
@@ -38,6 +39,19 @@ https://ai.google.dev/gemini-api/docs/deprecations):
   Key comes ONLY from env GEMINI_API_KEY. It is NEVER printed, logged,
   or included in any report or error message.
 
+  Groq (added 2026-11-14) is the second provider, called on alternate
+  turns. OpenAI-compatible chat completions at POST
+  https://api.groq.com/openai/v1/chat/completions, key in the
+  Authorization Bearer header, response_format json_object, temperature
+  0. Default model qwen/qwen3.8-27b (Qwen3.8 27B) — a free-tier model
+  on Groq (30 RPM, 1,000 requests/day, 200K tokens/day; verified
+  2026-11-14 against Groq's rate-limits docs). qwen/qwen3-32b was
+  retired from the free plan on 2026-07-17, so it is NOT the default.
+  Override with env GROQ_MODEL. Key comes ONLY from env GROQ_API_KEY
+  (a GitHub repo secret for the Actions run — the EC2 .env copy does
+  not reach Actions). The `groq` SDK is NOT used: the script calls the
+  endpoint with stdlib urllib, exactly like the Gemini path.
+
 Cadence (same as the deterministic audit):
   --only-due scores only posts that are due: never LLM-scored
   (audit_llm_score IS NULL) or last LLM-scored at least --rescore-days
@@ -47,28 +61,39 @@ Cadence (same as the deterministic audit):
   was unmeasured; the 2026-11-14 runs proved the cap is per-minute
   (10 RPM), not daily, and 6s spacing stays under it, so a full run
   scores everything due (a ~241-post backlog takes ~40 minutes).
-  In steady state that is ~1 new post/day plus rolling re-checks
-  (posts whose audit_llm_at is 30+ days old).
+  Since 2026-11-14 the run alternates Gemini and Groq call by call:
+  each provider then sees a call every 6s, so the gap BETWEEN calls
+  is 3s, keeping both providers at or below 10 RPM and roughly
+  doubling throughput. With only one provider live (the other's key
+  missing, or disabled mid-run after its quota died) the gap goes
+  back to 6s. In steady state that is ~1 new post/day plus rolling
+  re-checks (posts whose audit_llm_at is 30+ days old).
 
 Quota safety:
-  - 6-second delay between calls. The first real run (2026-11-14) hit
-    HTTP 429 after only 11 calls made ~2s apart — consistent with a
-    10-requests/minute free-tier cap, not a daily quota. 6s spacing
-    keeps the attempt rate at or below 10/min.
+  - 3-second delay between calls while BOTH providers are live
+    (alternating, so each provider sees a call every 6s — at or below
+    its 10 RPM free-tier cap); 6s when only one provider is live.
+    The first real run (2026-11-14) hit HTTP 429 after only 11 calls
+    made ~2s apart — consistent with a 10-requests/minute free-tier
+    cap, not a daily quota.
   - On HTTP 429 the run RETRIES the same call: it waits the delay the
     server suggests (Retry-After header, or the retryDelay in the
     error body; otherwise 60s, doubling to a 300s cap), up to 3
-    retries, then the run STOPS scoring cleanly: scores already
-    obtained are kept and written, the report is finished, and the
-    script exits 0 with a printed "quota reached after N posts" note
-    (naming how many 429 retries were spent). The remaining due posts
-    are picked up by the next run. If the 429 is a per-minute cap, the
-    retry rides it out and the run scores its full batch; if it is a
-    daily cap, the retries fail the same way and the run stops having
-    spent only the retry waits, not the backlog.
-  - On HTTP 404 (model not available for this project — e.g. a
-    deprecated model name) the run aborts with exit 2 and a clear
-    message; no quota is spent on calls that cannot succeed.
+    retries. If the retries are exhausted, that PROVIDER is disabled
+    for the rest of the run and the article is retried on the other
+    provider; the run only STOPS scoring cleanly when BOTH providers
+    are gone (scores already obtained are kept and written, the
+    report is finished, and the script exits 0 with a printed
+    "quota reached after N posts" note naming how many 429 retries
+    were spent). The remaining due posts are picked up by the next
+    run. If the 429 is a per-minute cap, the retry rides it out and
+    the run scores its full batch; if it is a daily cap, the retries
+    fail the same way and the provider is disabled, not the run.
+  - On HTTP 404 (model not available — e.g. a deprecated model name)
+    or 401 (wrong key) the affected provider is disabled the same
+    way, not the run; only if both providers are unusable does the
+    run abort with exit 2 and a clear message, so no quota is spent
+    on calls that cannot succeed.
   - Any other per-post failure (invalid model JSON, other HTTP errors)
     records that post as failed and the run continues.
 
@@ -81,7 +106,7 @@ anything, so no quota is burned on a doomed run.
 What this script does NOT do (unless --write-scores is given):
   - No writes to the database (SELECT only; the connection is opened
     read-only). Never deletes or modifies articles.
-  - Never prints or logs GEMINI_API_KEY or DATABASE_URL.
+  - Never prints or logs GEMINI_API_KEY, GROQ_API_KEY, or DATABASE_URL.
   - Never touches production publishing or any cron/workflow.
 
 With --write-scores it additionally UPDATEs places.audit_llm_score and
@@ -108,6 +133,10 @@ Env:
   GEMINI_API_KEY Gemini API key — only needed for real API calls
                  (not with --mock-llm). Never paste it anywhere.
   GEMINI_MODEL   Model name (default: gemini-3.5-flash-lite).
+  GROQ_API_KEY   Groq API key (starts with gsk_) — the second
+                 provider; if it is missing the run is Gemini-only
+                 at 6s spacing. Only needed for real API calls.
+  GROQ_MODEL     Model name (default: qwen/qwen3.8-27b).
 
 Outputs (tools/audit/output-llm/):
   llm-report.md      human-readable report (the main deliverable)
@@ -115,7 +144,8 @@ Outputs (tools/audit/output-llm/):
   snapshot-<date>.json frozen slug list + category counts for this run
 
 Requires: psycopg2-binary. Only Python stdlib otherwise (urllib for the
-Gemini REST call — no extra dependency).
+Gemini and Groq REST calls — no extra dependency; the `groq` SDK is
+not needed).
 """
 import argparse
 import hashlib
@@ -141,10 +171,23 @@ BATCH_SIZE = 50
 # the runs proved the free-tier limit is 10 RPM, not daily — 6s spacing
 # stays under it, so a full run scores everything due).
 DEFAULT_MAX_ARTICLES = None
-# 6s between calls: the 2026-11-14 run hit 429 after 11 calls ~2s apart,
-# consistent with a 10 RPM free-tier cap. 6s spacing keeps the attempt
-# rate at or below 10/min (API latency adds more).
-CALL_DELAY_SECONDS = 6
+# Delay between calls. With TWO providers alternating (2026-11-14),
+# each provider sees a call every 6s, so a 3s gap between successive
+# calls keeps BOTH at or below their 10 RPM free-tier caps — roughly
+# doubling throughput. With a single provider live (the other's key
+# missing, or disabled mid-run after its quota died), the gap goes
+# back to 6s. (2026-11-14: the Gemini-only run hit 429 after 11 calls
+# ~2s apart, consistent with a 10 RPM cap; 6s spacing stays under it.
+# API latency adds more.)
+CALL_DELAY_DUAL_SECONDS = 3
+CALL_DELAY_SINGLE_SECONDS = 6
+
+
+def live_delay(live_providers):
+    """Gap before the next call: 3s while two providers are live
+    (each then sees a call every 6s), 6s with only one live."""
+    return (CALL_DELAY_DUAL_SECONDS if len(live_providers) > 1
+            else CALL_DELAY_SINGLE_SECONDS)
 # 429 retries per call: wait the server-suggested delay, then retry.
 # 3 retries x up to ~60-240s waits is enough to ride out a per-minute
 # cap; if the cap is daily, all retries fail the same way and the run
@@ -174,6 +217,13 @@ def log(msg):
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 GEMINI_ENDPOINT = ("https://generativelanguage.googleapis.com/v1beta/"
                    "models/{model}:generateContent")
+
+# Groq (added 2026-11-14): qwen/qwen3.8-27b (Qwen3.8 27B) is a
+# free-tier model on Groq (30 RPM, 1,000 requests/day, 200K tokens/
+# day). qwen/qwen3-32b was retired from the free plan on 2026-07-17
+# and is NOT the default. Override with env GROQ_MODEL.
+DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 
 # The four qualitative criteria, as defined in the 24-article sample
 # report (llm-sample-report-2026-11-14.md). The prompt below uses these
@@ -475,18 +525,66 @@ def mock_llm_result(article):
             "verdict": verdict}
 
 
-def call_gemini(prompt, api_key, model):
-    """One generateContent call. Returns the raw model text.
+def _urlopen_json_with_429(req, provider, model):
+    """POST a prepared request and return the parsed JSON payload.
+    Shared by the Gemini and Groq callers.
 
-    On HTTP 429, retries the SAME call up to MAX_429_RETRIES times,
-    waiting the server-suggested delay (Retry-After header or the
-    retryDelay in the error body; otherwise 60s, doubling, capped at
-    300s). Retries are counted in RATE_STATE for the report. If the
-    retries are exhausted, raises QuotaReached. Raises
-    ModelUnavailable on HTTP 404, and urllib.error.URLError /
-    HTTPError for anything else. Never includes the API key in any
-    exception message or log.
+    On HTTP 429, retries the SAME request up to MAX_429_RETRIES
+    times, waiting the delay the server suggests (Retry-After header,
+    or the retryDelay in the error body; otherwise 60s, doubling,
+    capped at 300s). Retries are counted in RATE_STATE for the
+    report. If the retries are exhausted, raises QuotaReached. On
+    HTTP 404 raises ModelUnavailable (a deprecated or wrong model
+    name). Any other HTTPError is re-raised. The API key is never
+    included in any exception message or log.
     """
+    waited = 0
+    for attempt in range(MAX_429_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < MAX_429_RETRIES:
+                delay = _parse_retry_delay(e)
+                if delay is None:
+                    delay = min(DEFAULT_429_WAIT_SECONDS * (2 ** attempt),
+                                MAX_429_WAIT_SECONDS)
+                delay = min(delay, MAX_429_WAIT_SECONDS)
+                RATE_STATE["retries_429"] += 1
+                RATE_STATE["waited_429"] += delay
+                waited += delay
+                log(f"{provider}: HTTP 429 — waiting {delay}s before "
+                    f"retry {attempt + 1}/{MAX_429_RETRIES}")
+                time.sleep(delay)
+                continue
+            if e.code == 429:
+                raise QuotaReached(
+                    f"HTTP 429 after {MAX_429_RETRIES} retries "
+                    f"(waited {waited}s in total): free-tier quota "
+                    "exhausted")
+            if e.code == 404:
+                raise ModelUnavailable(
+                    f"HTTP 404 from {provider} model {model}: the model "
+                    "is not available (a deprecated or wrong model "
+                    "name). Check "
+                    f"{'GEMINI_MODEL' if provider == 'gemini' else 'GROQ_MODEL'}.")
+            raise
+
+
+class Provider:
+    """One LLM provider for a run: name, call function, key, model,
+    and how many API calls it made (for the report meta)."""
+    def __init__(self, name, call, key, model):
+        self.name = name
+        self.call = call
+        self.key = key
+        self.model = model
+        self.calls = 0
+
+
+def call_gemini(prompt, api_key, model):
+    """One generateContent call. Returns the raw model text. 429/404
+    handling lives in _urlopen_json_with_429 (shared with Groq)."""
     url = GEMINI_ENDPOINT.format(model=model)
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
@@ -498,38 +596,7 @@ def call_gemini(prompt, api_key, model):
         url, data=body, method="POST",
         headers={"Content-Type": "application/json",
                  "x-goog-api-key": api_key})
-    waited = 0
-    for attempt in range(MAX_429_RETRIES + 1):
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-            break
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < MAX_429_RETRIES:
-                delay = _parse_retry_delay(e)
-                if delay is None:
-                    delay = min(DEFAULT_429_WAIT_SECONDS * (2 ** attempt),
-                                MAX_429_WAIT_SECONDS)
-                delay = min(delay, MAX_429_WAIT_SECONDS)
-                RATE_STATE["retries_429"] += 1
-                RATE_STATE["waited_429"] += delay
-                waited += delay
-                log(f"HTTP 429 — waiting {delay}s before retry "
-                    f"{attempt + 1}/{MAX_429_RETRIES} (no quota "
-                    f"spent on the wait)")
-                time.sleep(delay)
-                continue
-            if e.code == 429:
-                raise QuotaReached(
-                    f"HTTP 429 after {MAX_429_RETRIES} retries "
-                    f"(waited {waited}s in total): free-tier quota "
-                    "exhausted")
-            if e.code == 404:
-                raise ModelUnavailable(
-                    f"HTTP 404 from model {model}: the model is not "
-                    "available for this project (a deprecated model name, "
-                    "or the project has no access). Check GEMINI_MODEL.")
-            raise
+    payload = _urlopen_json_with_429(req, "gemini", model)
     candidates = payload.get("candidates") or []
     if not candidates:
         raise ValueError("Gemini reply has no candidates")
@@ -537,6 +604,54 @@ def call_gemini(prompt, api_key, model):
     text = "".join(p.get("text", "") for p in parts).strip()
     if not text:
         raise ValueError("Gemini reply has no text")
+    return text
+
+
+def call_groq(prompt, api_key, model):
+    """One Groq chat-completions call (OpenAI-compatible endpoint,
+    stdlib urllib — the `groq` SDK is NOT needed). Returns the raw
+    model text.
+
+    temperature 0 (deterministic scoring, same intent as Gemini's
+    0.3), response_format json_object so the model returns strict
+    JSON, max_completion_tokens 1024 (the audit JSON is ~300-500
+    tokens; this leaves room without wasting quota). 429/404 handling
+    is shared with Gemini via _urlopen_json_with_429. A 401 (wrong
+    key) raises ModelUnavailable so the run can disable Groq and
+    continue on Gemini instead of failing every other call.
+    """
+    body = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_completion_tokens": 1024,
+        "response_format": {"type": "json_object"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        GROQ_ENDPOINT, data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 # Cloudflare in front of api.groq.com returns 403
+                 # (error 1010) for the Python-urllib default
+                 # User-Agent (verified 2026-11-14); any non-blocked
+                 # UA passes — this one identifies the project.
+                 "User-Agent": "hk-daily-places-audit/1.0",
+                 "Authorization": f"Bearer {api_key}"})
+    try:
+        payload = _urlopen_json_with_429(req, "groq", model)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise ModelUnavailable(
+                "HTTP 401 from Groq: the GROQ_API_KEY is invalid. "
+                "Check the key (GitHub secret GROQ_API_KEY for "
+                "Actions runs).")
+        raise
+    choices = payload.get("choices") or []
+    if not choices:
+        raise ValueError("Groq reply has no choices")
+    content = ((choices[0].get("message") or {}).get("content") or "")
+    text = content.strip()
+    if not text:
+        raise ValueError("Groq reply has no text")
     return text
 
 
@@ -555,11 +670,15 @@ def _raw_excerpt(text):
     return flat[:600] + " ...[truncated]... " + flat[-600:]
 
 
-def score_article_llm(article, api_key, model, mock=False):
-    """Score one article. Returns (scores dict, total, verdict, reasons,
-    error). On invalid model output, retries once with the same prompt;
-    if it still fails, returns error and the post is recorded as failed
-    (the run does not crash). error is None on success."""
+def score_article_llm(article, provider, mock=False):
+    """Score one article with ONE provider. Returns (scores dict,
+    total, verdict, reasons, error). On invalid model output, retries
+    once with the same prompt; if it still fails, returns error and
+    the post is recorded as failed (the run does not crash). error is
+    None on success. QuotaReached / ModelUnavailable from the
+    provider call are NOT caught here — the caller disables that
+    provider and retries the article on the other one. In mock mode
+    the provider is ignored (pass None)."""
     if mock:
         data = mock_llm_result(article)
         scores, reasons, verdict = validate_llm_result(data)
@@ -570,7 +689,8 @@ def score_article_llm(article, api_key, model, mock=False):
     # reply is the only evidence of what the model actually returned.
     attempt_errors = []
     for _attempt in range(2):
-        text = call_gemini(prompt, api_key, model)
+        provider.calls += 1
+        text = provider.call(prompt, provider.key, provider.model)
         try:
             data = _extract_json(text)
             scores, reasons, verdict = validate_llm_result(data)
@@ -654,7 +774,11 @@ def render_markdown(meta, rows, failed, quota_note, mock):
     add(f"- Source: {meta['source']} (loaded {meta['loaded']} articles, "
         f"scored {meta['scored']}, failed {len(failed)})")
     add(f"- Selection: {meta['selection']['rule']}")
-    add(f"- Model: {meta['model']} (GEMINI_MODEL)")
+    add(f"- Model: {meta['model']}")
+    if meta.get("providers") and not mock:
+        add("- Provider calls: " + ", ".join(
+            f"{name} {info['calls']} ({info['model']})"
+            for name, info in meta["providers"].items()))
     add(f"- Categories: {meta['per_category']}")
     add(f"- Mean LLM score: "
         f"{round(sum(totals) / len(totals), 1) if totals else 0} / 100")
@@ -715,7 +839,7 @@ def render_markdown(meta, rows, failed, quota_note, mock):
     add("- The model may reward fluent, specific-sounding text even when "
         "a fact is wrong; Q3 judges specificity, it does not fact-check "
         "each claim against a source.")
-    add("- Free-tier content may be used by Google to improve its "
+    add("- Free-tier content may be used by the provider to improve its "
         "products; only public article text is ever sent.")
     return "\n".join(lines) + "\n"
 
@@ -764,7 +888,7 @@ def write_llm_scores(db_url, rows, run_dt, dry_run=False):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="LLM qualitative audit for hk-daily-places "
-                    "(Gemini API scoring).")
+                    "(Gemini + Groq API scoring, alternating).")
     parser.add_argument("--from-seed", metavar="PATH",
                         help="load articles from a seed JSON file instead "
                              "of the database (local test mode)")
@@ -803,8 +927,10 @@ def main(argv=None):
     if args.max_articles is not None and args.max_articles < 0:
         parser.error("--max-articles must be >= 0")
 
-    model = os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
-    api_key = os.environ.get("GEMINI_API_KEY")
+    gemini_model = os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    groq_model = os.environ.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
+    groq_key = os.environ.get("GROQ_API_KEY")
     db_url = os.environ.get("DATABASE_URL")
 
     if args.from_seed:
@@ -839,10 +965,26 @@ def main(argv=None):
               "scores are test data and must never be written to the "
               "database.", file=sys.stderr)
         sys.exit(2)
-    if not args.mock_llm and not api_key:
-        print("ERROR: no Gemini API key. Set GEMINI_API_KEY, or run with "
-              "--mock-llm to test without a key.", file=sys.stderr)
+    if not args.mock_llm and not gemini_key and not groq_key:
+        print("ERROR: no LLM API key. Set GEMINI_API_KEY and/or "
+              "GROQ_API_KEY, or run with --mock-llm to test without a "
+              "key.", file=sys.stderr)
         sys.exit(2)
+
+    # Providers, in alternation order: Gemini first, then Groq. A
+    # provider with no key is simply absent — the run is then
+    # single-provider at 6s spacing.
+    providers = []
+    if gemini_key:
+        providers.append(Provider("gemini", call_gemini, gemini_key,
+                                   gemini_model))
+    if groq_key:
+        providers.append(Provider("groq", call_groq, groq_key,
+                                   groq_model))
+    live_providers = list(providers)  # shrinks if one dies mid-run
+    model_label = (" + ".join(f"{p.name} ({p.model})"
+                              for p in providers)
+                   if providers else "mock")
 
     print(f"Loaded {len(articles)} articles "
           f"({dict(Counter(a['category'] for a in articles))})")
@@ -890,67 +1032,94 @@ def main(argv=None):
         print("Nothing due — nothing to score.")
         return 0
 
-    # Score one article at a time, with a delay between calls. A 429
-    # stops the loop cleanly (scores so far are kept); a 404 aborts
-    # the whole run (the model is unusable for this project).
-    est_secs = len(to_score) * (CALL_DELAY_SECONDS + 3)
-    log(f"Scoring {len(to_score)} articles with {model} "
-        f"(delay {CALL_DELAY_SECONDS}s, up to {MAX_429_RETRIES} "
+    # Score one article at a time, alternating providers call by call,
+    # with a delay between calls. A provider that dies (quota after
+    # its 429 retries, or a bad key/model) is disabled and the article
+    # is retried on the other provider; the loop only stops when BOTH
+    # providers are gone (scores so far are kept).
+    delay = live_delay(live_providers)
+    est_secs = len(to_score) * (delay + 3)
+    log(f"Scoring {len(to_score)} articles with {model_label}"
+        f"{', alternating' if len(live_providers) > 1 else ''} "
+        f"(delay {delay}s, up to {MAX_429_RETRIES} "
         f"retries on 429; est. ~{est_secs // 60}m{est_secs % 60}s)")
     results, failed = [], []
     quota_note = None
+    turn = 0
     for index, article in enumerate(to_score):
         call_t0 = time.monotonic()
-        log(f"-> [{index + 1}/{len(to_score)}] {article['slug']} "
-            f"({article['category']}) — calling {model}...")
         if index > 0 and not args.mock_llm:
             # The delay is quota protection for real API calls; mock
             # calls need none.
-            time.sleep(CALL_DELAY_SECONDS)
-        try:
+            time.sleep(live_delay(live_providers))
+        if args.mock_llm:
             scores, total, verdict, reasons, error = score_article_llm(
-                article, api_key, model, mock=args.mock_llm)
-        except QuotaReached as e:
-            quota_note = (f"quota reached after {len(results)} posts "
-                          f"({e}; {RATE_STATE['retries_429']} 429 "
-                          f"retries spent across the run, "
-                          f"{RATE_STATE['waited_429']}s waited in "
-                          f"total); remaining "
-                          f"{len(to_score) - len(results)} due posts will "
-                          f"be picked up by the next run")
-            print(f"\n{quota_note}")
+                article, None, mock=True)
+            if error is not None:
+                failed.append({"slug": article["slug"], "error": error})
+                log(f"  {article['slug']}: FAILED ({error}) "
+                    f"({time.monotonic() - call_t0:.1f}s)")
+                continue
+            results.append({"scores": scores, "total": total,
+                            "verdict": verdict, "reasons": reasons})
+            log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
+                f"{total} [{verdict}] "
+                f"({time.monotonic() - call_t0:.1f}s)")
+            continue
+        while live_providers:
+            provider = live_providers[turn % len(live_providers)]
+            turn += 1
+            log(f"-> [{index + 1}/{len(to_score)}] {article['slug']} "
+                f"({article['category']}) — calling {provider.name} "
+                f"({provider.model})...")
+            try:
+                scores, total, verdict, reasons, error = \
+                    score_article_llm(article, provider)
+            except (QuotaReached, ModelUnavailable) as e:
+                live_providers.remove(provider)
+                if live_providers:
+                    log(f"  {provider.name} disabled for this run: "
+                        f"{e} — retrying on "
+                        f"{live_providers[0].name}")
+                    continue
+                quota_note = (f"quota reached after {len(results)} "
+                              f"posts ({e}; "
+                              f"{RATE_STATE['retries_429']} 429 retries "
+                              f"spent across the run, "
+                              f"{RATE_STATE['waited_429']}s waited in "
+                              f"total); remaining "
+                              f"{len(to_score) - len(results)} due posts "
+                              f"will be picked up by the next run")
+                print(f"\n{quota_note}")
+                break
+            except Exception as e:
+                # Any other per-call failure (network, malformed
+                # reply): record the post as failed and continue.
+                # Include the HTTP status code when there is one —
+                # "HTTPError" alone does not say whether the provider
+                # returned 500, 503, or 400.
+                detail = type(e).__name__
+                code = getattr(e, "code", None)
+                if code is not None:
+                    detail = f"{detail} {code}"
+                failed.append({"slug": article["slug"],
+                               "error": f"call failed: {detail}"})
+                log(f"  {article['slug']}: FAILED ({detail}) "
+                    f"({time.monotonic() - call_t0:.1f}s)")
+                break
+            if error is not None:
+                failed.append({"slug": article["slug"], "error": error})
+                log(f"  {article['slug']}: FAILED ({error}) "
+                    f"({time.monotonic() - call_t0:.1f}s)")
+                break
+            results.append({"scores": scores, "total": total,
+                            "verdict": verdict, "reasons": reasons})
+            log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
+                f"{total} [{verdict}] "
+                f"({time.monotonic() - call_t0:.1f}s)")
             break
-        except ModelUnavailable as e:
-            print(f"\nERROR: {e}", file=sys.stderr)
-            print("Aborting before any more quota is spent. Check "
-                  "GEMINI_MODEL (the default is verified for a new "
-                  "free-tier project; a deprecated model name returns "
-                  "404).", file=sys.stderr)
-            sys.exit(2)
-        except Exception as e:
-            # Any other per-call failure (network, malformed reply):
-            # record the post as failed and continue. Include the HTTP
-            # status code when there is one — "HTTPError" alone does
-            # not say whether Google returned 500, 503, or 400.
-            detail = type(e).__name__
-            code = getattr(e, "code", None)
-            if code is not None:
-                detail = f"{detail} {code}"
-            failed.append({"slug": article["slug"],
-                           "error": f"call failed: {detail}"})
-            log(f"  {article['slug']}: FAILED ({detail}) "
-                f"({time.monotonic() - call_t0:.1f}s)")
-            continue
-        if error is not None:
-            failed.append({"slug": article["slug"], "error": error})
-            log(f"  {article['slug']}: FAILED ({error}) "
-                f"({time.monotonic() - call_t0:.1f}s)")
-            continue
-        results.append({"scores": scores, "total": total,
-                        "verdict": verdict, "reasons": reasons})
-        log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
-            f"{total} [{verdict}] "
-            f"({time.monotonic() - call_t0:.1f}s)")
+        if quota_note:
+            break
 
     # Rows must align with results: failed slugs (and any posts not
     # reached after a quota stop) are excluded, in slug order.
@@ -965,7 +1134,9 @@ def main(argv=None):
     run_dt = run_now.replace(tzinfo=None)
     meta = {"date": date, "source": source, "rows": len(rows),
             "loaded": len(articles), "scored": len(rows),
-            "selection": selection, "model": model,
+            "selection": selection, "model": model_label,
+            "providers": {p.name: {"model": p.model, "calls": p.calls}
+                          for p in providers},
             "mock": args.mock_llm,
             "retries_429": RATE_STATE["retries_429"],
             "waited_429_seconds": RATE_STATE["waited_429"],
@@ -975,7 +1146,7 @@ def main(argv=None):
     snapshot = {"date": date, "source": source, "count": len(articles),
                 "per_category": meta["per_category"],
                 "loaded": len(articles), "scored": len(rows),
-                "selection": selection, "model": model,
+                "selection": selection, "model": model_label,
                 "mock": args.mock_llm,
                 "slugs": sorted(a["slug"] for a in articles),
                 "due_slugs": sorted(a["slug"] for a in due),

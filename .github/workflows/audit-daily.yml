@@ -10,20 +10,23 @@ name: content-audit-daily
 # because the TF-IDF duplicate matrix needs the full corpus, but only
 # due posts are scored and written back.
 #
-# Job `llm-audit` (Gemini API, free tier): the same due-selection, but
-# for qualitative LLM scores — never LLM-scored (audit_llm_score IS
-# NULL) or last LLM-scored at least 30 days ago — and writes
-# audit_llm_score / audit_llm_at. It scores every due post per run (no
-# cap since 2026-11-14: the runs proved the free-tier limit is 10 RPM,
-# not daily, and 6s spacing stays under it; a full backlog run takes
-# ~40 minutes and the steady state is ~1 new post/day plus rolling
-# re-checks). On HTTP 429 it retries with backoff, then stops cleanly
-# and the next run picks up the remainder.
-# It needs the repo secret GEMINI_API_KEY (Settings -> Secrets and
-# variables -> Actions) and the EC2 rebuild must have created
-# audit_llm_score / audit_llm_at first (the script checks and refuses
-# to run without them). The two jobs are independent and write
-# different columns; either may fail without affecting the other.
+# Job `llm-audit` (Gemini + Groq APIs, alternating, free tier): the same
+# due-selection, but for qualitative LLM scores — never LLM-scored
+# (audit_llm_score IS NULL) or last LLM-scored at least 30 days ago —
+# and writes audit_llm_score / audit_llm_at. It scores every due post
+# per run (no cap since 2026-11-14: the runs proved the free-tier limit
+# is 10 RPM, not daily, and 6s spacing stays under it). Since
+# 2026-11-14 the run alternates Gemini and Groq call by call with a 3s
+# gap (each provider then sees a call every 6s), roughly doubling
+# throughput; if one provider's quota dies mid-run it is disabled and
+# the other carries on, so the run only stops when both are gone.
+# It needs the repo secrets GEMINI_API_KEY and GROQ_API_KEY
+# (Settings -> Secrets and variables -> Actions) and the EC2 rebuild
+# must have created audit_llm_score / audit_llm_at first (the script
+# checks and refuses to run without them). If only one key is set the
+# run is single-provider at 6s spacing. The two jobs are independent
+# and write different columns; either may fail without affecting the
+# other.
 on:
   schedule:
     - cron: '0 3 * * *'   # 11:00 HKT daily (avoids the recommender's 02:00/14:00 UTC runs)
@@ -88,6 +91,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       - name: Upload LLM audit report
         if: always()
         uses: actions/upload-artifact@v4

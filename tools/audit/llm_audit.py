@@ -65,8 +65,9 @@ Cadence (same as the deterministic audit):
   each provider then sees a call every 6s, so the gap BETWEEN calls
   is 3s, keeping both providers at or below 10 RPM and roughly
   doubling throughput. With only one provider live (the other's key
-  missing, or disabled mid-run after its quota died) the gap goes
-  back to 6s. --providers groq runs Groq only (e.g. after Gemini's
+  missing, or disabled mid-run after its quota died) the gap is that
+  provider's own safe spacing: Groq 3s (30 RPM cap), Gemini 6s (10
+  RPM cap). --providers groq runs Groq only (e.g. after Gemini's
   daily quota is spent — 2026-11-14: Gemini 429'd on the first call
   of the night run with a 300s suggested delay); --providers gemini
   runs Gemini only. In steady state that is ~1 new post/day plus rolling
@@ -178,19 +179,24 @@ DEFAULT_MAX_ARTICLES = None
 # each provider sees a call every 6s, so a 3s gap between successive
 # calls keeps BOTH at or below their 10 RPM free-tier caps — roughly
 # doubling throughput. With a single provider live (the other's key
-# missing, or disabled mid-run after its quota died), the gap goes
-# back to 6s. (2026-11-14: the Gemini-only run hit 429 after 11 calls
-# ~2s apart, consistent with a 10 RPM cap; 6s spacing stays under it.
-# API latency adds more.)
+# missing, disabled mid-run after its quota died, or --providers),
+# the gap is that provider's own safe spacing: Groq 3s (its free-tier
+# cap is 30 RPM, so 3s = 20 RPM is safe) or Gemini 6s (10 RPM cap;
+# the Gemini-only run hit 429 after 11 calls ~2s apart, and 6s
+# spacing stays under it. API latency adds more).
 CALL_DELAY_DUAL_SECONDS = 3
-CALL_DELAY_SINGLE_SECONDS = 6
+CALL_DELAY_SINGLE_SECONDS = {"groq": 3, "gemini": 6}
 
 
 def live_delay(live_providers):
     """Gap before the next call: 3s while two providers are live
-    (each then sees a call every 6s), 6s with only one live."""
-    return (CALL_DELAY_DUAL_SECONDS if len(live_providers) > 1
-            else CALL_DELAY_SINGLE_SECONDS)
+    (each then sees a call every 6s); with only one live, that
+    provider's own safe spacing (Groq 3s, Gemini 6s)."""
+    if len(live_providers) > 1:
+        return CALL_DELAY_DUAL_SECONDS
+    if live_providers:
+        return CALL_DELAY_SINGLE_SECONDS[live_providers[0].name]
+    return CALL_DELAY_DUAL_SECONDS
 # 429 retries per call: wait the server-suggested delay, then retry.
 # 3 retries x up to ~60-240s waits is enough to ride out a per-minute
 # cap; if the cap is daily, all retries fail the same way and the run

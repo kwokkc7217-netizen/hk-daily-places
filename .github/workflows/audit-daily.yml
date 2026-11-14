@@ -10,17 +10,22 @@ name: content-audit-daily
 # because the TF-IDF duplicate matrix needs the full corpus, but only
 # due posts are scored and written back.
 #
-# Job `llm-audit` (Gemini + Groq APIs, alternating, free tier): the same
+# Job `llm-audit` (3 Gemini keys + Groq, rotating, free tier): the same
 # due-selection, but for qualitative LLM scores — never LLM-scored
 # (audit_llm_score IS NULL) or last LLM-scored at least 30 days ago —
 # and writes audit_llm_score / audit_llm_at. It scores every due post
 # per run (no cap since 2026-11-14: the runs proved the free-tier limit
 # is 10 RPM, not daily, and 6s spacing stays under it). Since
-# 2026-11-14 the run alternates Gemini and Groq call by call with a 3s
-# gap (each provider then sees a call every 6s), roughly doubling
-# throughput; if one provider's quota dies mid-run it is disabled and
-# the other carries on, so the run only stops when both are gone.
-# It needs the repo secrets GEMINI_API_KEY and GROQ_API_KEY
+# 2026-11-15 the run rotates four endpoints call by call in this fixed
+# order — gemini-1 (GEMINI_API_KEY), groq (GROQ_API_KEY), gemini-2
+# (GEMINI_API_KEY2), gemini-3 (GEMINI_API_KEY3) — with a 3s gap (each
+# endpoint then sees a call every 12s). On HTTP 429 the same article
+# fails over to the next endpoint after 3s instead of waiting out the
+# same key; an endpoint that looks daily-capped (server suggests >=
+# 120s) is dead for the run, a per-minute cap cools it down, and 3
+# consecutive 429s kill it; up to 10 attempts per article. The run
+# only stops when all endpoints are dead. It needs the repo secrets
+# GEMINI_API_KEY, GEMINI_API_KEY2, GEMINI_API_KEY3 and GROQ_API_KEY
 # (Settings -> Secrets and variables -> Actions) and the EC2 rebuild
 # must have created audit_llm_score / audit_llm_at first (the script
 # checks and refuses to run without them). If only one key is set the
@@ -100,6 +105,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
+          GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       - name: Upload LLM audit report
         if: always()

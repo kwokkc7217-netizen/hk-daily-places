@@ -149,6 +149,19 @@ MAX_429_WAIT_SECONDS = 300
 # Counts of 429 retries actually spent (for the report meta).
 RATE_STATE = {"retries_429": 0, "waited_429": 0}
 
+# Live progress logging: GitHub Actions shows the script's stdout, but
+# Python buffers it when piped and the run goes quiet for minutes
+# (6s spacing + API latency + up to 240s of 429 waits), which looks
+# stalled. log() timestamps every line (local time + seconds since
+# the script started) and flushes, so the Actions log shows what the
+# run is doing while it is doing it.
+_T0 = time.monotonic()
+
+
+def log(msg):
+    now = datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
+    print(f"[{now} +{time.monotonic() - _T0:.0f}s] {msg}", flush=True)
+
 # Verified 2026-11-14 (see header): gemini-2.5-flash is deprecated and
 # restricted to prior users; gemini-3.5-flash-lite is Google's stated
 # replacement for this use. Override with env GEMINI_MODEL.
@@ -449,9 +462,9 @@ def call_gemini(prompt, api_key, model):
                 RATE_STATE["retries_429"] += 1
                 RATE_STATE["waited_429"] += delay
                 waited += delay
-                print(f"  HTTP 429 — waiting {delay}s before retry "
-                      f"{attempt + 1}/{MAX_429_RETRIES} (no quota "
-                      f"spent on the wait)")
+                log(f"HTTP 429 — waiting {delay}s before retry "
+                    f"{attempt + 1}/{MAX_429_RETRIES} (no quota "
+                    f"spent on the wait)")
                 time.sleep(delay)
                 continue
             if e.code == 429:
@@ -809,9 +822,16 @@ def main(argv=None):
     # Score one article at a time, with a delay between calls. A 429
     # stops the loop cleanly (scores so far are kept); a 404 aborts
     # the whole run (the model is unusable for this project).
+    est_secs = len(to_score) * (CALL_DELAY_SECONDS + 3)
+    log(f"Scoring {len(to_score)} articles with {model} "
+        f"(delay {CALL_DELAY_SECONDS}s, up to {MAX_429_RETRIES} "
+        f"retries on 429; est. ~{est_secs // 60}m{est_secs % 60}s)")
     results, failed = [], []
     quota_note = None
     for index, article in enumerate(to_score):
+        call_t0 = time.monotonic()
+        log(f"-> [{index + 1}/{len(to_score)}] {article['slug']} "
+            f"({article['category']}) — calling {model}...")
         if index > 0 and not args.mock_llm:
             # The delay is quota protection for real API calls; mock
             # calls need none.
@@ -841,16 +861,19 @@ def main(argv=None):
             # record the post as failed and continue.
             failed.append({"slug": article["slug"],
                            "error": f"call failed: {type(e).__name__}"})
-            print(f"  {article['slug']}: FAILED ({type(e).__name__})")
+            log(f"  {article['slug']}: FAILED ({type(e).__name__}) "
+                f"({time.monotonic() - call_t0:.1f}s)")
             continue
         if error is not None:
             failed.append({"slug": article["slug"], "error": error})
-            print(f"  {article['slug']}: FAILED ({error})")
+            log(f"  {article['slug']}: FAILED ({error}) "
+                f"({time.monotonic() - call_t0:.1f}s)")
             continue
         results.append({"scores": scores, "total": total,
                         "verdict": verdict, "reasons": reasons})
-        print(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
-              f"{total} [{verdict}]")
+        log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
+            f"{total} [{verdict}] "
+            f"({time.monotonic() - call_t0:.1f}s)")
 
     # Rows must align with results: failed slugs (and any posts not
     # reached after a quota stop) are excluded, in slug order.
@@ -898,9 +921,10 @@ def main(argv=None):
         print("LLM score write-back: 0 rows scored — nothing to write")
 
     dist = Counter(r["verdict"] for r in rows)
-    print(f"\nDone: {len(rows)} articles scored, {len(failed)} failed — "
-          f"KEEP {dist['KEEP']} / IMPROVE {dist['IMPROVE']} / "
-          f"REWRITE {dist['REWRITE']}")
+    log(f"Done in {time.monotonic() - _T0:.0f}s: {len(rows)} articles "
+        f"scored, {len(failed)} failed — "
+        f"KEEP {dist['KEEP']} / IMPROVE {dist['IMPROVE']} / "
+        f"REWRITE {dist['REWRITE']}")
     if quota_note:
         print(f"Quota: {quota_note}")
     print(f"Reports written to {args.output_dir}")

@@ -123,21 +123,24 @@ a post was last LLM-scored.
 ### Daily design (same cadence as the deterministic audit)
 
 The GitHub Actions workflow (`content-audit-daily`, job `llm-audit`)
-runs this script every day at 11:00 HKT with `--only-due --max-articles
-50 --write-scores`:
+runs this script every day at 11:00 HKT with `--only-due
+--write-scores` (no per-run cap since 2026-11-14 — see below):
 
 * Only **due** posts are scored: never LLM-scored (`audit_llm_score IS
   NULL`), or last LLM-scored at least `--rescore-days` days ago
   (default 30; exactly 30 days old counts as due).
-* `--max-articles 50` caps the run at 50 posts/day. The free tier is
-  roughly 20–250 requests/day depending on the project, so 50/day
-  clears the ~241-post backlog in about 5 days; the steady state is ~1
-  new post/day plus rolling re-checks.
-* On HTTP 429 (quota exhausted) the run **stops cleanly**: scores
-  already obtained are kept and written, the report is finished, and
-  the script exits 0 with a "quota reached after N posts" note. The
-  remaining due posts are picked up by the next run. A 429 is never
-  retried in a loop.
+* No `--max-articles` cap: the cap was 50/day while the free-tier
+  limit was unmeasured. The 2026-11-14 runs proved the limit is
+  10 requests/minute, not daily, and the script's 6s spacing stays
+  under it — a full run scores everything due (~40 minutes for a
+  ~241-post backlog). The steady state is ~1 new post/day plus
+  rolling re-checks.
+* On HTTP 429 the run **retries with backoff** (up to 3 times per
+  call, waiting the server-suggested delay), and only stops cleanly
+  if the retries are exhausted: scores already obtained are kept and
+  written, the report is finished, and the script exits 0 with a
+  "quota reached after N posts" note. The remaining due posts are
+  picked up by the next run.
 * Before any API call, the script checks `information_schema` that
   `audit_llm_score` and `audit_llm_at` exist on `places`. If either is
   missing it exits 2 ("columns not created yet — run the EC2 rebuild
@@ -186,7 +189,7 @@ cd ~/workspace/hk-daily-places
 # Real run (needs DATABASE_URL + GEMINI_API_KEY in env)
 export DATABASE_URL='postgres://...?sslmode=require'
 export GEMINI_API_KEY='...'   # never paste this anywhere
-~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py --only-due --max-articles 50
+~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py --only-due
 ```
 
 ### Useful flags
@@ -195,7 +198,7 @@ export GEMINI_API_KEY='...'   # never paste this anywhere
 |---|---|
 | `--dry-run` | Due count + first prompt preview; makes NO API calls and writes nothing (no report, no DB) |
 | `--mock-llm` | Canned valid JSON instead of the Gemini API (tests parsing, scoring, report writing, write logic). Mock scores are derived from the content hash — varied and valid, but **not real**; the report header says so, and `--write-scores --mock-llm` is refused |
-| `--max-articles N` | Score at most N due posts per run (default 50) |
+| `--max-articles N` | Score at most N due posts per run (default: no cap) |
 | `--write-scores` | Write `audit_llm_score` / `audit_llm_at` back to `places` (DB mode only; refused in `--from-seed` mode and with `--mock-llm`; with `--dry-run` prints what would be written) |
 | `--only-due` | Score only due posts (never LLM-scored, or LLM-scored at least `--rescore-days` ago) |
 | `--rescore-days N` | With `--only-due`: re-score posts whose last LLM audit is at least N days old (default 30; exactly N days old counts as due) |

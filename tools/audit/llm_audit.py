@@ -42,10 +42,13 @@ Cadence (same as the deterministic audit):
   --only-due scores only posts that are due: never LLM-scored
   (audit_llm_score IS NULL) or last LLM-scored at least --rescore-days
   days ago (default 30; exactly 30 days old counts as due).
-  --max-articles N (default 50) caps how many due posts are scored per
-  run. The free tier is roughly 20-250 requests/day depending on the
-  project, so 50/day clears the ~241-post backlog in about 5 days and the
-  steady state is ~1 new post/day plus rolling re-checks.
+  --max-articles N caps how many due posts are scored per run (default:
+  no cap — all due posts). The cap was 50 while the free-tier limit
+  was unmeasured; the 2026-11-14 runs proved the cap is per-minute
+  (10 RPM), not daily, and 6s spacing stays under it, so a full run
+  scores everything due (a ~241-post backlog takes ~40 minutes).
+  In steady state that is ~1 new post/day plus rolling re-checks
+  (posts whose audit_llm_at is 30+ days old).
 
 Quota safety:
   - 6-second delay between calls. The first real run (2026-11-14) hit
@@ -96,7 +99,7 @@ Usage:
   python llm_audit.py --from-seed ../../src/main/resources/seed/bulk-places.json --mock-llm
   python llm_audit.py --from-seed ../../src/main/resources/seed/bulk-places.json --mock-llm --dry-run
   python llm_audit.py --mock-llm --max-articles 5 --from-seed ../../src/main/resources/seed/bulk-places.json
-  python llm_audit.py --only-due --max-articles 50            # DB + Gemini API
+  python llm_audit.py --only-due                        # DB + Gemini API (no cap)
   python llm_audit.py --only-due --write-scores                # write scores back
 
 Env:
@@ -134,7 +137,10 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output-llm"
 
 BATCH_SIZE = 50
-DEFAULT_MAX_ARTICLES = 50
+# No per-run cap by default (2026-11-14: the 50 cap was removed once
+# the runs proved the free-tier limit is 10 RPM, not daily — 6s spacing
+# stays under it, so a full run scores everything due).
+DEFAULT_MAX_ARTICLES = None
 # 6s between calls: the 2026-11-14 run hit 429 after 11 calls ~2s apart,
 # consistent with a 10 RPM free-tier cap. 6s spacing keeps the attempt
 # rate at or below 10/min (API latency adds more).
@@ -699,9 +705,8 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="where to write the report files")
     parser.add_argument("--max-articles", type=int, default=DEFAULT_MAX_ARTICLES,
-                        help="score at most N due posts per run (default "
-                             "50 — free-tier daily quota is limited; "
-                             "the backlog clears over several runs)")
+                        help="score at most N due posts per run (default: "
+                             "no cap — score everything due)")
     parser.add_argument("--dry-run", action="store_true",
                         help="count what would be processed and print the "
                              "first prompt preview; makes NO API calls "

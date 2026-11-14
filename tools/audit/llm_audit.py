@@ -198,9 +198,18 @@ MAX_429_WAIT_SECONDS = 300
 # Counts of 429 retries actually spent (for the report meta).
 RATE_STATE = {"retries_429": 0, "waited_429": 0}
 
+# Database connect timeout (seconds). The 2026-11-14 dual-provider run
+# sat silent after "Checking LLM columns exist on places…" for minutes
+# with no log output — a psycopg2.connect with no timeout can hang
+# indefinitely on a stalled connection, and the run then looks dead
+# instead of failing fast. 30s is generous for a warm Neon instance
+# (the deterministic job connects in ~1s) and turns a stall into a
+# visible error.
+DB_CONNECT_TIMEOUT_SECONDS = 30
+
 # Live progress logging: GitHub Actions shows the script's stdout, but
 # Python buffers it when piped and the run goes quiet for minutes
-# (6s spacing + API latency + up to 240s of 429 waits), which looks
+# (3s spacing + API latency + up to 240s of 429 waits), which looks
 # stalled. log() timestamps every line (local time + seconds since
 # the script started) and flushes, so the Actions log shows what the
 # run is doing while it is doing it.
@@ -268,7 +277,8 @@ Reply with STRICT JSON only, no other text:
 
 def load_from_db(db_url):
     """Read-only SELECT of all PUBLISHED places. Never writes."""
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url,
+                            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS)
     conn.set_session(readonly=True)
     try:
         with conn.cursor() as cur:
@@ -355,7 +365,8 @@ def check_llm_columns(db_url):
     before any API call is made; if either is missing, the EC2 rebuild
     has not created them yet and the run must not start (no quota
     burned on a doomed run)."""
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url,
+                            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS)
     conn.set_session(readonly=True)
     try:
         with conn.cursor() as cur:
@@ -861,7 +872,8 @@ def write_llm_scores(db_url, rows, run_dt, dry_run=False):
                   f"verdict={r['verdict']}")
         return 0
     updated = 0
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url,
+                            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS)
     try:
         for start in range(0, len(rows), BATCH_SIZE):
             batch = rows[start:start + BATCH_SIZE]

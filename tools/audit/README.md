@@ -105,9 +105,113 @@ Processing is batched (~50 articles); `audit-report.json` is rewritten
 after each batch, so an interrupted run leaves the last completed batch
 on disk. Re-running is idempotent — outputs are overwritten.
 
+## LLM audit — `tools/audit/llm_audit.py`
+
+Qualitative scoring with the Gemini API (free tier). Same rubric as the
+24-article agent sample: Q1 originality / Q2 usefulness / Q3 accuracy /
+Q4 value-add, each 0–10, total = sum × 2.5 → /100, verdict KEEP /
+IMPROVE / REWRITE. It writes **only** `audit_llm_score` /
+`audit_llm_at` — never the deterministic columns.
+
+**Why two columns, not one:** the score needs its own timestamp.
+`audit_llm_at` records when the post was last LLM-scored. The "one
+month no checked" rule cannot reuse `audited_at`, because that
+timestamp belongs to the deterministic run, which rewrites it every 30
+days — without its own timestamp the LLM selector could never tell when
+a post was last LLM-scored.
+
+### Daily design (same cadence as the deterministic audit)
+
+The GitHub Actions workflow (`content-audit-daily`, job `llm-audit`)
+runs this script every day at 11:00 HKT with `--only-due --max-articles
+50 --write-scores`:
+
+* Only **due** posts are scored: never LLM-scored (`audit_llm_score IS
+  NULL`), or last LLM-scored at least `--rescore-days` days ago
+  (default 30; exactly 30 days old counts as due).
+* `--max-articles 50` caps the run at 50 posts/day. The free tier is
+  roughly 20–250 requests/day depending on the project, so 50/day
+  clears the ~241-post backlog in about 5 days; the steady state is ~1
+  new post/day plus rolling re-checks.
+* On HTTP 429 (quota exhausted) the run **stops cleanly**: scores
+  already obtained are kept and written, the report is finished, and
+  the script exits 0 with a "quota reached after N posts" note. The
+  remaining due posts are picked up by the next run. A 429 is never
+  retried in a loop.
+* Before any API call, the script checks `information_schema` that
+  `audit_llm_score` and `audit_llm_at` exist on `places`. If either is
+  missing it exits 2 ("columns not created yet — run the EC2 rebuild
+  first") without calling the API — no quota burned on a doomed run.
+
+### Before the first scored run writes (two manual steps)
+
+1. **Add the repo secret `GEMINI_API_KEY`** in GitHub → repo Settings
+   → Secrets and variables → Actions. Copy the value from the EC2
+   `~/hk-daily-places/.env` (`GEMINI_API_KEY=…`) — never paste it in
+   chat, in a file, or anywhere else.
+2. **EC2 rebuild** (same steps as the last rebuild: `git pull` +
+   `docker build` + recreate the container) so `ddl-auto=update`
+   creates `audit_llm_score` and `audit_llm_at`. Verify with the CMS
+   DB console: `SELECT slug, audit_llm_score, audit_llm_at FROM places
+   LIMIT 5;` → all NULLs = columns exist.
+
+### Model (verified 2026-11-14)
+
+Default model is `gemini-3.5-flash-lite` (env `GEMINI_MODEL` to
+override). `gemini-2.5-flash` is **deprecated** — no longer selectable
+in AI Studio, access limited to prior users, and from 1 Dec 2026 its
+requests auto-route to `gemini-3.5-flash-lite`. A brand-new key (no
+prior usage) would most likely get 404 on 2.5-flash, so the default is
+Google's stated replacement. Endpoint: `POST
+https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`,
+key in the `x-goog-api-key` header. The key is never printed, logged,
+or included in any report or error message. Free-tier content may be
+used by Google to improve its products — only public article text is
+ever sent.
+
+### Run it
+
+```bash
+cd ~/workspace/hk-daily-places
+~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py --help
+
+# Local test (no key, no quota): canned valid JSON, full path exercised
+~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py \
+  --from-seed src/main/resources/seed/bulk-places.json --mock-llm
+
+# Dry run: due count + first prompt preview, NO API calls, nothing written
+~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py \
+  --from-seed src/main/resources/seed/bulk-places.json --mock-llm --dry-run
+
+# Real run (needs DATABASE_URL + GEMINI_API_KEY in env)
+export DATABASE_URL='postgres://...?sslmode=require'
+export GEMINI_API_KEY='...'   # never paste this anywhere
+~/workspace/tools/pyvenv/bin/python tools/audit/llm_audit.py --only-due --max-articles 50
+```
+
+### Useful flags
+
+| Flag | What it does |
+|---|---|
+| `--dry-run` | Due count + first prompt preview; makes NO API calls and writes nothing (no report, no DB) |
+| `--mock-llm` | Canned valid JSON instead of the Gemini API (tests parsing, scoring, report writing, write logic). Mock scores are derived from the content hash — varied and valid, but **not real**; the report header says so, and `--write-scores --mock-llm` is refused |
+| `--max-articles N` | Score at most N due posts per run (default 50) |
+| `--write-scores` | Write `audit_llm_score` / `audit_llm_at` back to `places` (DB mode only; refused in `--from-seed` mode and with `--mock-llm`; with `--dry-run` prints what would be written) |
+| `--only-due` | Score only due posts (never LLM-scored, or LLM-scored at least `--rescore-days` ago) |
+| `--rescore-days N` | With `--only-due`: re-score posts whose last LLM audit is at least N days old (default 30; exactly N days old counts as due) |
+| `--output-dir DIR` | Where reports go (default `tools/audit/output-llm/`) |
+
+## Outputs (`tools/audit/output-llm/`)
+
+| File | Contents |
+|---|---|
+| `llm-report.md` | Human-readable report: per-category means, verdict counts, top-10 / bottom-10 articles with Q1–Q4 and the model's reasons, failed list, quota note |
+| `llm-report.json` | Machine-readable rows (one per scored article: q1–q4, total, verdict, reasons, `content_hash` — same sha256 formula as audit.py) + failed list |
+| `snapshot-<date>.json` | Frozen slug list + category counts, due subset (`due_slugs`), scored subset (`scored_slugs`), failed subset |
+
 ## Do not commit the outputs
 
-`tools/audit/output/` is working output, not source. The report files are
+`tools/audit/output-llm/` is working output, not source. The report files are
 copied to the goal workspace for review; do not commit them to the repo.
 
 ## What this is not

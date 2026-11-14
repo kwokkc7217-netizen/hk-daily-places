@@ -101,6 +101,15 @@ public class Place {
     /** Content audit：呢個分數係幾時寫入嘅。可空，未評分就係 NULL。 */
     private LocalDateTime auditedAt;
 
+    /** LLM qualitative audit：最新一次 LLM 評分嘅總分（0–100）。可空，未評分就係 NULL。 */
+    // 注意：要用 wrapper Integer（可 null），理由同上面 auditScore 一樣。
+    private Integer auditLlmScore;
+
+    /** LLM qualitative audit：呢個分數係幾時寫入嘅。可空，未評分就係 NULL。
+     * 唔可以用 auditedAt 嚟揀 LLM 要重評邊篇，因為 auditedAt 屬於 deterministic audit，
+     * 每 30 日就會被重寫 — 冇自己嘅 timestamp，LLM selector 永遠分唔清邊篇幾時 LLM 評過。 */
+    private LocalDateTime auditLlmAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -232,5 +241,21 @@ public class Place {
 
     public void setAuditedAt(LocalDateTime auditedAt) {
         this.auditedAt = auditedAt;
+    }
+
+    public Integer getAuditLlmScore() {
+        return auditLlmScore;
+    }
+
+    public void setAuditLlmScore(Integer auditLlmScore) {
+        this.auditLlmScore = auditLlmScore;
+    }
+
+    public LocalDateTime getAuditLlmAt() {
+        return auditLlmAt;
+    }
+
+    public void setAuditLlmAt(LocalDateTime auditLlmAt) {
+        this.auditLlmAt = auditLlmAt;
     }
 }

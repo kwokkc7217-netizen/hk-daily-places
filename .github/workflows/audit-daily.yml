@@ -1,21 +1,35 @@
 name: content-audit-daily
 
-# Daily content audit (deterministic checks only — no LLM calls).
-# Every day at 11:00 HKT this scores the posts that are due: never checked
+# Daily content audit — two independent jobs, same schedule.
+#
+# Job `audit` (deterministic checks only — no LLM calls): every day at
+# 11:00 HKT it scores the posts that are due — never checked
 # (audit_score IS NULL) or last checked at least 30 days ago
-# (--only-due, --rescore-days 30). All PUBLISHED articles are loaded
-# every run because the TF-IDF duplicate matrix needs the full corpus,
-# but only due posts are scored and written back. The first daily run
-# scores the whole corpus (~241 never-checked posts); afterwards it
-# settles to ~1 new post a day plus rolling 30-day re-checks. The Gemini
-# API key is NOT used by this workflow — nothing here calls any LLM.
+# (--only-due, --rescore-days 30) — and writes audit_score /
+# audit_status / audited_at. All PUBLISHED articles are loaded every run
+# because the TF-IDF duplicate matrix needs the full corpus, but only
+# due posts are scored and written back.
+#
+# Job `llm-audit` (Gemini API, free tier): the same due-selection, but
+# for qualitative LLM scores — never LLM-scored (audit_llm_score IS
+# NULL) or last LLM-scored at least 30 days ago — and writes
+# audit_llm_score / audit_llm_at. It scores at most 50 due posts per
+# run (--max-articles 50): the free tier is roughly 20-250
+# requests/day, so 50/day clears the ~241-post backlog in about 5 days
+# and the steady state is ~1 new post/day plus rolling re-checks. On
+# HTTP 429 it stops cleanly and the next run picks up the remainder.
+# It needs the repo secret GEMINI_API_KEY (Settings -> Secrets and
+# variables -> Actions) and the EC2 rebuild must have created
+# audit_llm_score / audit_llm_at first (the script checks and refuses
+# to run without them). The two jobs are independent and write
+# different columns; either may fail without affecting the other.
 on:
   schedule:
     - cron: '0 3 * * *'   # 11:00 HKT daily (avoids the recommender's 02:00/14:00 UTC runs)
   workflow_dispatch:
     inputs:
       write_scores:
-        description: 'Write scores back to places (audit_score/audit_status/audited_at).'
+        description: 'Write scores back to places (audit_score/audit_status/audited_at for the deterministic job; audit_llm_score/audit_llm_at for the LLM job).'
         required: false
         default: false
         type: boolean
@@ -45,4 +59,31 @@ jobs:
         with:
           name: content-audit-report
           path: tools/audit/output/
+          retention-days: 90
+
+  llm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+      - name: Run LLM audit
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write_scores }}" = "true" ]; then
+            python tools/audit/llm_audit.py --only-due --max-articles 50 --write-scores
+          else
+            python tools/audit/llm_audit.py --only-due --max-articles 50
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Upload LLM audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-audit-llm-report
+          path: tools/audit/output-llm/
           retention-days: 90

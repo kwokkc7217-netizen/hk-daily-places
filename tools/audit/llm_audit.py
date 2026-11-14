@@ -48,12 +48,21 @@ Cadence (same as the deterministic audit):
   steady state is ~1 new post/day plus rolling re-checks.
 
 Quota safety:
-  - 2-second delay between calls.
-  - On HTTP 429 (quota exhausted) the run STOPS scoring cleanly: scores
-    already obtained are kept and written, the report is finished, and
-    the script exits 0 with a printed "quota reached after N posts"
-    note. The remaining due posts are picked up by the next run. A 429
-    is never retried in a loop.
+  - 6-second delay between calls. The first real run (2026-11-14) hit
+    HTTP 429 after only 11 calls made ~2s apart — consistent with a
+    10-requests/minute free-tier cap, not a daily quota. 6s spacing
+    keeps the attempt rate at or below 10/min.
+  - On HTTP 429 the run RETRIES the same call: it waits the delay the
+    server suggests (Retry-After header, or the retryDelay in the
+    error body; otherwise 60s, doubling to a 300s cap), up to 3
+    retries, then the run STOPS scoring cleanly: scores already
+    obtained are kept and written, the report is finished, and the
+    script exits 0 with a printed "quota reached after N posts" note
+    (naming how many 429 retries were spent). The remaining due posts
+    are picked up by the next run. If the 429 is a per-minute cap, the
+    retry rides it out and the run scores its full batch; if it is a
+    daily cap, the retries fail the same way and the run stops having
+    spent only the retry waits, not the backlog.
   - On HTTP 404 (model not available for this project — e.g. a
     deprecated model name) the run aborts with exit 2 and a clear
     message; no quota is spent on calls that cannot succeed.
@@ -126,7 +135,19 @@ DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output-llm"
 
 BATCH_SIZE = 50
 DEFAULT_MAX_ARTICLES = 50
-CALL_DELAY_SECONDS = 2
+# 6s between calls: the 2026-11-14 run hit 429 after 11 calls ~2s apart,
+# consistent with a 10 RPM free-tier cap. 6s spacing keeps the attempt
+# rate at or below 10/min (API latency adds more).
+CALL_DELAY_SECONDS = 6
+# 429 retries per call: wait the server-suggested delay, then retry.
+# 3 retries x up to ~60-240s waits is enough to ride out a per-minute
+# cap; if the cap is daily, all retries fail the same way and the run
+# stops cleanly (see call_gemini).
+MAX_429_RETRIES = 3
+DEFAULT_429_WAIT_SECONDS = 60
+MAX_429_WAIT_SECONDS = 300
+# Counts of 429 retries actually spent (for the report meta).
+RATE_STATE = {"retries_429": 0, "waited_429": 0}
 
 # Verified 2026-11-14 (see header): gemini-2.5-flash is deprecated and
 # restricted to prior users; gemini-3.5-flash-lite is Google's stated
@@ -284,7 +305,39 @@ def check_llm_columns(db_url):
 # ---------------------------------------------------------------------------
 
 class QuotaReached(Exception):
-    """Raised on HTTP 429: stop scoring cleanly, keep what we have."""
+    """Raised on HTTP 429 after all retries: stop scoring cleanly,
+    keep what we have. Carries how many retries were spent so the
+    report can say whether the cap looks per-minute or daily."""
+
+
+def _parse_retry_delay(error):
+    """Seconds the server asks us to wait after a 429, or None.
+
+    Prefers the Retry-After response header, then the retryDelay in
+    the error body's details (google.rpc.RetryInfo, e.g. "58s").
+    Returns None when neither is present or parseable.
+    """
+    try:
+        raw = error.headers.get("Retry-After")
+        if raw is not None and str(raw).strip().isdigit():
+            return int(str(raw).strip())
+    except Exception:
+        pass
+    try:
+        body = error.read()
+        if body:
+            payload = json.loads(body.decode("utf-8", "replace"))
+            for detail in (payload.get("error") or {}).get("details", []):
+                delay = detail.get("retryDelay")
+                if isinstance(delay, str) and delay.endswith("s"):
+                    value = delay[:-1]
+                    try:
+                        return int(float(value))
+                    except ValueError:
+                        pass
+    except Exception:
+        pass
+    return None
 
 
 class ModelUnavailable(Exception):
@@ -360,9 +413,14 @@ def mock_llm_result(article):
 def call_gemini(prompt, api_key, model):
     """One generateContent call. Returns the raw model text.
 
-    Raises QuotaReached on HTTP 429, ModelUnavailable on HTTP 404, and
-    urllib.error.URLError / HTTPError for anything else. Never includes
-    the API key in any exception message or log.
+    On HTTP 429, retries the SAME call up to MAX_429_RETRIES times,
+    waiting the server-suggested delay (Retry-After header or the
+    retryDelay in the error body; otherwise 60s, doubling, capped at
+    300s). Retries are counted in RATE_STATE for the report. If the
+    retries are exhausted, raises QuotaReached. Raises
+    ModelUnavailable on HTTP 404, and urllib.error.URLError /
+    HTTPError for anything else. Never includes the API key in any
+    exception message or log.
     """
     url = GEMINI_ENDPOINT.format(model=model)
     body = json.dumps({
@@ -375,18 +433,38 @@ def call_gemini(prompt, api_key, model):
         url, data=body, method="POST",
         headers={"Content-Type": "application/json",
                  "x-goog-api-key": api_key})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        if e.code == 429:
-            raise QuotaReached("HTTP 429: free-tier quota exhausted")
-        if e.code == 404:
-            raise ModelUnavailable(
-                f"HTTP 404 from model {model}: the model is not "
-                "available for this project (a deprecated model name, "
-                "or the project has no access). Check GEMINI_MODEL.")
-        raise
+    waited = 0
+    for attempt in range(MAX_429_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < MAX_429_RETRIES:
+                delay = _parse_retry_delay(e)
+                if delay is None:
+                    delay = min(DEFAULT_429_WAIT_SECONDS * (2 ** attempt),
+                                MAX_429_WAIT_SECONDS)
+                delay = min(delay, MAX_429_WAIT_SECONDS)
+                RATE_STATE["retries_429"] += 1
+                RATE_STATE["waited_429"] += delay
+                waited += delay
+                print(f"  HTTP 429 — waiting {delay}s before retry "
+                      f"{attempt + 1}/{MAX_429_RETRIES} (no quota "
+                      f"spent on the wait)")
+                time.sleep(delay)
+                continue
+            if e.code == 429:
+                raise QuotaReached(
+                    f"HTTP 429 after {MAX_429_RETRIES} retries "
+                    f"(waited {waited}s in total): free-tier quota "
+                    "exhausted")
+            if e.code == 404:
+                raise ModelUnavailable(
+                    f"HTTP 404 from model {model}: the model is not "
+                    "available for this project (a deprecated model name, "
+                    "or the project has no access). Check GEMINI_MODEL.")
+            raise
     candidates = payload.get("candidates") or []
     if not candidates:
         raise ValueError("Gemini reply has no candidates")
@@ -743,7 +821,10 @@ def main(argv=None):
                 article, api_key, model, mock=args.mock_llm)
         except QuotaReached as e:
             quota_note = (f"quota reached after {len(results)} posts "
-                          f"({e}); remaining "
+                          f"({e}; {RATE_STATE['retries_429']} 429 "
+                          f"retries spent across the run, "
+                          f"{RATE_STATE['waited_429']}s waited in "
+                          f"total); remaining "
                           f"{len(to_score) - len(results)} due posts will "
                           f"be picked up by the next run")
             print(f"\n{quota_note}")
@@ -786,6 +867,8 @@ def main(argv=None):
             "loaded": len(articles), "scored": len(rows),
             "selection": selection, "model": model,
             "mock": args.mock_llm,
+            "retries_429": RATE_STATE["retries_429"],
+            "waited_429_seconds": RATE_STATE["waited_429"],
             "per_category": dict(Counter(a["category"] for a in articles))}
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

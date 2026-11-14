@@ -114,11 +114,12 @@ What this script does NOT do (unless --write-scores is given):
   - Never touches production publishing or any cron/workflow.
 
 With --write-scores it additionally UPDATEs places.audit_llm_score and
-audit_llm_at per slug (parameterized, batched at 50, one transaction
-per batch). It never updates audit_score, audit_status, audited_at,
-title, description, or any other column. --dry-run prints the due
-count and the first prompt preview, makes NO API calls, and writes
-nothing.
+audit_llm_at per slug (parameterized, one transaction per post,
+committed the moment that post is scored — so a cancelled run keeps
+the posts it already scored instead of losing them all). It never
+updates audit_score, audit_status, audited_at, title, description,
+or any other column. --dry-run prints the due count and the first
+prompt preview, makes NO API calls, and writes nothing.
 
 Each JSON row carries content_hash (sha256 of slug + title +
 description; same formula as audit.py) so a future run can skip
@@ -170,7 +171,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output-llm"
 
-BATCH_SIZE = 50
+BATCH_SIZE = 50  # (kept for the deterministic audit; the LLM writer is
+# per-post since 2026-11-14 and no longer batches)
 # No per-run cap by default (2026-11-14: the 50 cap was removed once
 # the runs proved the free-tier limit is 10 RPM, not daily — 6s spacing
 # stays under it, so a full run scores everything due).
@@ -793,6 +795,11 @@ def render_markdown(meta, rows, failed, quota_note, mock):
         add("")
     add(f"- Source: {meta['source']} (loaded {meta['loaded']} articles, "
         f"scored {meta['scored']}, failed {len(failed)})")
+    if meta.get("write_scores"):
+        add(f"- Written to DB: {meta.get('written', 0)}/"
+            f"{meta['scored']} (per post, as scored)")
+        if meta.get("write_note"):
+            add(f"  - {meta['write_note']}")
     add(f"- Selection: {meta['selection']['rule']}")
     add(f"- Model: {meta['model']}")
     if meta.get("providers") and not mock:
@@ -864,41 +871,27 @@ def render_markdown(meta, rows, failed, quota_note, mock):
     return "\n".join(lines) + "\n"
 
 
-def write_llm_scores(db_url, rows, run_dt, dry_run=False):
-    """Write back audit_llm_score / audit_llm_at per slug.
+def write_one_llm_score(conn, slug, total, run_dt):
+    """Write one article's LLM score the moment it is scored.
 
-    ONLY these two columns are ever updated — never audit_score,
-    audit_status, audited_at, title, description, or any other column.
-    Parameterized queries, one transaction per batch of BATCH_SIZE rows
-    with a per-batch commit. In dry-run mode, print exactly what would
-    be written and write nothing to the DB. Returns the number of rows
-    updated (0 in dry-run).
+    ONLY audit_llm_score / audit_llm_at are ever updated — never
+    audit_score, audit_status, audited_at, title, description, or any
+    other column. Parameterized query, one transaction per post
+    (commit immediately). Returns the number of rows updated (1 on
+    success, 0 if the slug is not in the table).
+
+    Per-post (2026-11-14): the old bulk write happened only after the
+    whole scoring loop, so a cancelled run lost every score it had
+    already computed (run 43610628143: 18 posts scored, 0 written).
+    Writing per post means a cancelled run keeps what it scored, and
+    the next run only re-scores the rest.
     """
-    if dry_run:
-        print(f"\nDry run: would write LLM scores for {len(rows)} articles:")
-        for r in rows:
-            print(f"  {r['slug']}: llm_score={r['total']} "
-                  f"verdict={r['verdict']}")
-        return 0
-    updated = 0
-    conn = psycopg2.connect(db_url,
-                            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS)
-    try:
-        for start in range(0, len(rows), BATCH_SIZE):
-            batch = rows[start:start + BATCH_SIZE]
-            with conn.cursor() as cur:
-                cur.executemany(
-                    "UPDATE places SET audit_llm_score = %s, "
+    with conn.cursor() as cur:
+        cur.execute("UPDATE places SET audit_llm_score = %s, "
                     "audit_llm_at = %s WHERE slug = %s",
-                    [(r["total"], run_dt, r["slug"]) for r in batch],
-                )
-                batch_updated = cur.rowcount
-            updated += batch_updated
-            conn.commit()
-            print(f"LLM scores written: batch {start // BATCH_SIZE + 1} "
-                  f"({len(batch)} rows, {batch_updated} updated)")
-    finally:
-        conn.close()
+                    (total, run_dt, slug))
+        updated = cur.rowcount
+    conn.commit()
     return updated
 
 
@@ -1075,6 +1068,43 @@ def main(argv=None):
     # its 429 retries, or a bad key/model) is disabled and the article
     # is retried on the other provider; the loop only stops when BOTH
     # providers are gone (scores so far are kept).
+    #
+    # Per-post write-back (2026-11-14): the write connection opens
+    # before scoring, and each score is committed the moment it is
+    # computed — a cancelled run keeps the posts it already scored.
+    # Opening it here also fails fast if the DB is unreachable,
+    # instead of after 200 scored posts. When --write-scores is off
+    # or the run is a dry run, write_conn stays None and nothing is
+    # written.
+    # Naive local datetime for places.audit_llm_at (matches the app's
+    # LocalDateTime / timestamp-without-time-zone columns; reuses the
+    # same clock as the due-selection above).
+    run_dt = run_now.replace(tzinfo=None)
+    write_conn = None
+    written = 0
+    write_note = None
+    if args.write_scores:
+        write_conn = psycopg2.connect(
+            db_url, connect_timeout=DB_CONNECT_TIMEOUT_SECONDS)
+
+    def write_now(slug, total):
+        """Commit one score immediately. On the first DB failure, log
+        once and stop trying — the remaining posts stay due for the
+        next run instead of crashing the loop."""
+        nonlocal written, write_note, write_conn
+        if write_conn is None:
+            return
+        try:
+            written += write_one_llm_score(write_conn, slug, total,
+                                           run_dt)
+        except Exception as e:
+            log(f"  WARNING: write-back failed for {slug} ({e}) — "
+                f"stopping per-post writes; the remaining posts stay "
+                f"due for the next run")
+            write_conn = None
+            write_note = (f"per-post write-back stopped after "
+                          f"{written} posts: {e}")
+
     delay = live_delay(live_providers)
     est_secs = len(to_score) * (delay + 3)
     log(f"Scoring {len(to_score)} articles with {model_label}"
@@ -1100,6 +1130,7 @@ def main(argv=None):
                 continue
             results.append({"scores": scores, "total": total,
                             "verdict": verdict, "reasons": reasons})
+            write_now(article["slug"], total)
             log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
                 f"{total} [{verdict}] "
                 f"({time.monotonic() - call_t0:.1f}s)")
@@ -1152,12 +1183,16 @@ def main(argv=None):
                 break
             results.append({"scores": scores, "total": total,
                             "verdict": verdict, "reasons": reasons})
+            write_now(article["slug"], total)
             log(f"  [{index + 1}/{len(to_score)}] {article['slug']}: "
                 f"{total} [{verdict}] "
                 f"({time.monotonic() - call_t0:.1f}s)")
             break
         if quota_note:
             break
+
+    if write_conn is not None:
+        write_conn.close()
 
     # Rows must align with results: failed slugs (and any posts not
     # reached after a quota stop) are excluded, in slug order.
@@ -1166,12 +1201,10 @@ def main(argv=None):
     rows = build_rows(scored_articles, results)
 
     date = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
-    # Naive local datetime for places.audit_llm_at (matches the app's
-    # LocalDateTime / timestamp-without-time-zone columns). Reuses the
-    # same clock as the due-selection above.
-    run_dt = run_now.replace(tzinfo=None)
     meta = {"date": date, "source": source, "rows": len(rows),
             "loaded": len(articles), "scored": len(rows),
+            "written": written, "write_note": write_note,
+            "write_scores": args.write_scores,
             "selection": selection, "model": model_label,
             "providers": {p.name: {"model": p.model, "calls": p.calls}
                           for p in providers},
@@ -1200,11 +1233,9 @@ def main(argv=None):
          "failed": failed, "rows": rows},
         ensure_ascii=False, indent=2), encoding="utf-8")
 
-    if args.write_scores and rows:
-        updated = write_llm_scores(db_url, rows, run_dt, dry_run=False)
-        print(f"LLM score write-back: {updated}/{len(rows)} rows updated")
-    elif args.write_scores:
-        print("LLM score write-back: 0 rows scored — nothing to write")
+    if args.write_scores:
+        print(f"LLM score write-back: {written}/{len(rows)} rows "
+              f"written to the DB (per post, as scored)")
 
     dist = Counter(r["verdict"] for r in rows)
     log(f"Done in {time.monotonic() - _T0:.0f}s: {len(rows)} articles "

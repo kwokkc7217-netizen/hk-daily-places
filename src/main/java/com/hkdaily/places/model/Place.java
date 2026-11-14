@@ -90,6 +90,17 @@ public class Place {
     @Column(nullable = false, columnDefinition = "bigint default 0")
     private long viewCount = 0;
 
+    /** Content audit：最新一次 deterministic audit 嘅總分（0–100）。可空，未評分就係 NULL。 */
+    // 注意：要用 wrapper Integer（可 null）——primitive int/long 會令 Hibernate 出 NOT NULL column，
+    // Postgres 唔俾喺有資料嘅表加 NOT NULL 又冇 default 嘅 column（見上面 viewCount 嘅教訓）。
+    private Integer auditScore;
+
+    /** Content audit 狀態：PASS / NEEDS_IMPROVEMENT / FAIL / REVIEW_REQUIRED。可空，未評分就係 NULL。 */
+    private String auditStatus;
+
+    /** Content audit：呢個分數係幾時寫入嘅。可空，未評分就係 NULL。 */
+    private LocalDateTime auditedAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -197,5 +208,29 @@ public class Place {
 
     public void setViewCount(long viewCount) {
         this.viewCount = viewCount;
+    }
+
+    public Integer getAuditScore() {
+        return auditScore;
+    }
+
+    public void setAuditScore(Integer auditScore) {
+        this.auditScore = auditScore;
+    }
+
+    public String getAuditStatus() {
+        return auditStatus;
+    }
+
+    public void setAuditStatus(String auditStatus) {
+        this.auditStatus = auditStatus;
+    }
+
+    public LocalDateTime getAuditedAt() {
+        return auditedAt;
+    }
+
+    public void setAuditedAt(LocalDateTime auditedAt) {
+        this.auditedAt = auditedAt;
     }
 }

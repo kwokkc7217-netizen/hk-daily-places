@@ -858,10 +858,16 @@ def main(argv=None):
             sys.exit(2)
         except Exception as e:
             # Any other per-call failure (network, malformed reply):
-            # record the post as failed and continue.
+            # record the post as failed and continue. Include the HTTP
+            # status code when there is one — "HTTPError" alone does
+            # not say whether Google returned 500, 503, or 400.
+            detail = type(e).__name__
+            code = getattr(e, "code", None)
+            if code is not None:
+                detail = f"{detail} {code}"
             failed.append({"slug": article["slug"],
-                           "error": f"call failed: {type(e).__name__}"})
-            log(f"  {article['slug']}: FAILED ({type(e).__name__}) "
+                           "error": f"call failed: {detail}"})
+            log(f"  {article['slug']}: FAILED ({detail}) "
                 f"({time.monotonic() - call_t0:.1f}s)")
             continue
         if error is not None:

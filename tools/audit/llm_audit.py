@@ -66,7 +66,10 @@ Cadence (same as the deterministic audit):
   is 3s, keeping both providers at or below 10 RPM and roughly
   doubling throughput. With only one provider live (the other's key
   missing, or disabled mid-run after its quota died) the gap goes
-  back to 6s. In steady state that is ~1 new post/day plus rolling
+  back to 6s. --providers groq runs Groq only (e.g. after Gemini's
+  daily quota is spent — 2026-11-14: Gemini 429'd on the first call
+  of the night run with a 300s suggested delay); --providers gemini
+  runs Gemini only. In steady state that is ~1 new post/day plus rolling
   re-checks (posts whose audit_llm_at is 30+ days old).
 
 Quota safety:
@@ -932,6 +935,13 @@ def main(argv=None):
                         help="use a canned valid JSON response instead of "
                              "the Gemini API (tests the full path "
                              "without a key or quota)")
+    parser.add_argument("--providers", type=str, default="both",
+                        choices=["both", "gemini", "groq"],
+                        help="which LLM provider(s) to use: both "
+                             "(alternate, default), gemini only, or groq "
+                             "only. Useful when one provider's daily "
+                             "quota is spent — e.g. --providers groq "
+                             "after Gemini hits its daily cap.")
     args = parser.parse_args(argv)
 
     if args.rescore_days < 0:
@@ -977,26 +987,36 @@ def main(argv=None):
               "scores are test data and must never be written to the "
               "database.", file=sys.stderr)
         sys.exit(2)
-    if not args.mock_llm and not gemini_key and not groq_key:
-        print("ERROR: no LLM API key. Set GEMINI_API_KEY and/or "
-              "GROQ_API_KEY, or run with --mock-llm to test without a "
-              "key.", file=sys.stderr)
-        sys.exit(2)
-
-    # Providers, in alternation order: Gemini first, then Groq. A
-    # provider with no key is simply absent — the run is then
-    # single-provider at 6s spacing.
+    # Providers, in alternation order: Gemini first, then Groq.
+    # --providers filters them (both/gemini/groq). A provider with no
+    # key is simply absent — the run is then single-provider at 6s
+    # spacing. The key check below is provider-aware, so a missing
+    # key for the requested provider names that provider.
     providers = []
-    if gemini_key:
+    if args.providers in ("both", "gemini") and gemini_key:
         providers.append(Provider("gemini", call_gemini, gemini_key,
                                    gemini_model))
-    if groq_key:
+    if args.providers in ("both", "groq") and groq_key:
         providers.append(Provider("groq", call_groq, groq_key,
                                    groq_model))
     live_providers = list(providers)  # shrinks if one dies mid-run
     model_label = (" + ".join(f"{p.name} ({p.model})"
                               for p in providers)
                    if providers else "mock")
+    if not args.mock_llm and not providers:
+        if args.providers == "groq":
+            print("ERROR: --providers groq but no GROQ_API_KEY is "
+                  "set. Add the key (GitHub secret GROQ_API_KEY for "
+                  "Actions runs) or drop --providers.", file=sys.stderr)
+        elif args.providers == "gemini":
+            print("ERROR: --providers gemini but no GEMINI_API_KEY "
+                  "is set. Add the key or drop --providers.",
+                  file=sys.stderr)
+        else:
+            print("ERROR: no LLM API key. Set GEMINI_API_KEY and/or "
+                  "GROQ_API_KEY, or run with --mock-llm to test "
+                  "without a key.", file=sys.stderr)
+        sys.exit(2)
 
     print(f"Loaded {len(articles)} articles "
           f"({dict(Counter(a['category'] for a in articles))})")

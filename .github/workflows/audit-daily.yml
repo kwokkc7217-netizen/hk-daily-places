@@ -37,6 +37,15 @@ on:
         required: false
         default: false
         type: boolean
+      providers:
+        description: 'Which LLM provider(s) the llm-audit job uses: both (alternate, default), gemini only, or groq only. Use groq when the Gemini daily quota is spent.'
+        required: false
+        default: both
+        type: choice
+        options:
+          - both
+          - gemini
+          - groq
 
 # Stream Python output live: without this, Python buffers stdout when
 # piped (as in Actions logs) and a long run looks stalled — nothing
@@ -84,9 +93,9 @@ jobs:
       - name: Run LLM audit
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write_scores }}" = "true" ]; then
-            python tools/audit/llm_audit.py --only-due --write-scores
+            python tools/audit/llm_audit.py --only-due --write-scores --providers ${{ inputs.providers || 'both' }}
           else
-            python tools/audit/llm_audit.py --only-due
+            python tools/audit/llm_audit.py --only-due --providers ${{ inputs.providers || 'both' }}
           fi
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}

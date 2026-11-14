@@ -29,8 +29,18 @@ any other column. --dry-run prints exactly what would be written and
 writes nothing.
 
 Each JSON row also carries content_hash (sha256 of slug + title +
-description) so a future monthly run can skip re-scoring unchanged
-posts (score-once design).
+description) so a future qualitative (LLM) step can skip re-scoring
+unchanged posts. The deterministic daily run instead uses the stored
+audit_score / audited_at columns for due-selection (see --only-due).
+
+Daily design: the GitHub Actions workflow runs this script every day
+with --only-due --write-scores. All PUBLISHED articles are loaded (the
+TF-IDF duplicate matrix needs the full corpus), but only due posts are
+scored and written back: never checked (audit_score IS NULL) or last
+checked at least --rescore-days days ago (default 30). The first daily
+run scores the whole corpus; afterwards it settles to ~1 new post/day
+plus rolling 30-day re-checks. No LLM calls — the Gemini API key is
+NOT used by this script or its workflow.
 
 Usage:
   python audit.py --from-seed ../../src/main/resources/seed/bulk-places.json
@@ -40,6 +50,8 @@ Usage:
   python audit.py --check-live                      # also fetch the sitemap
   python audit.py --write-scores                    # write scores back to DB
   python audit.py --write-scores --dry-run          # print what would be written
+  python audit.py --only-due --write-scores         # daily: score due posts only
+  python audit.py --only-due --rescore-days 15      # re-check after 15 days
 
 Env:
   DATABASE_URL  Neon Postgres connection string (needs ?sslmode=require)
@@ -64,7 +76,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import psycopg2
@@ -116,24 +128,30 @@ def load_from_db(db_url):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT slug, title, COALESCE(description, ''), category, "
-                "imageUrl, youtubeId, publishedAt, createdAt, viewCount "
+                "imageUrl, youtubeId, publishedAt, createdAt, viewCount, "
+                "audit_score, audit_status, audited_at "
                 "FROM places WHERE status = 'PUBLISHED' ORDER BY slug"
             )
             rows = cur.fetchall()
     finally:
         conn.close()
     articles = []
-    for slug, title, desc, cat, img, yt, pub, created, views in rows:
+    for (slug, title, desc, cat, img, yt, pub, created, views,
+         score, status, audited) in rows:
         articles.append({
             "slug": slug, "title": title, "description": desc or "",
             "category": cat, "imageUrl": img or "", "youtubeId": yt or "",
             "publishedAt": pub, "createdAt": created, "viewCount": views or 0,
+            "auditScore": score, "auditStatus": status,
+            "auditedAt": audited,
         })
     return articles
 
 
 def load_from_seed(path):
-    """Local test mode: seed JSON has no createdAt — D10 reports that."""
+    """Local test mode: seed JSON has no createdAt — D10 reports that.
+    Seed rows also carry no audit columns, so they count as never
+    checked (due under --only-due)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     items = data if isinstance(data, list) else data.get("places", data)
     articles = []
@@ -147,6 +165,7 @@ def load_from_seed(path):
             "youtubeId": it.get("youtubeId", "") or "",
             "publishedAt": _parse_dt(pub) if pub else None,
             "createdAt": None, "viewCount": it.get("viewCount", 0) or 0,
+            "auditScore": None, "auditStatus": None, "auditedAt": None,
         })
     articles.sort(key=lambda a: a["slug"])
     return articles
@@ -157,6 +176,38 @@ def _parse_dt(value):
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _naive_local(dt):
+    """Return a naive local datetime for comparison. audited_at is a
+    timestamp without time zone in the DB, so it arrives naive; if a
+    caller passes an aware datetime, convert it to local naive first."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone().replace(tzinfo=None)
+
+
+def is_due(article, rescore_days, now):
+    """Pure due-selection predicate (unit-testable, no DB).
+
+    A post is due when it has never been checked (audit_score is NULL,
+    or audited_at is NULL — the two are written together, so a NULL in
+    either means no trustworthy previous check) or its last check is
+    at least rescore_days old.
+
+    Boundary: a check exactly rescore_days ago counts as due — the
+    post has gone a full rescore_days without a fresh check. So the
+    rule is age >= rescore_days, i.e. "not checked in the last
+    rescore_days". One second under rescore_days is NOT due.
+    """
+    if article.get("auditScore") is None:
+        return True
+    audited_at = _naive_local(article.get("auditedAt"))
+    if audited_at is None:
+        return True
+    return (_naive_local(now) - audited_at) >= timedelta(days=rescore_days)
 
 
 # ---------------------------------------------------------------------------
@@ -547,9 +598,11 @@ def score_article(article, d1, d2, d3d4, d5, dup_info, series_member):
 
 def compute_content_hash(article):
     """sha256 of slug + title + description. Stored in the JSON rows so a
-    future monthly run can skip re-scoring unchanged posts (score-once
-    design): if the hash matches the previously stored one, the old
-    score stands and no LLM call is spent."""
+    future qualitative (LLM) step can skip re-scoring unchanged posts
+    (score-once design): if the hash matches the previously stored one,
+    the old score stands and no LLM call is spent. The deterministic
+    daily run itself selects by the audit_score / audited_at columns
+    instead (see is_due)."""
     payload = "\n".join([article["slug"], article["title"],
                          article["description"]])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -614,7 +667,9 @@ def render_markdown(meta, rows, d6, d7, d8, d9, d11, missing_markers):
     add = lines.append
     add(f"# hk-daily-places — Content Audit Report ({meta['date']})")
     add("")
-    add(f"- Source: {meta['source']} ({meta['rows']} articles)")
+    add(f"- Source: {meta['source']} (loaded {meta['loaded']} articles, "
+        f"scored {meta['scored']})")
+    add(f"- Selection: {meta['selection']['rule']}")
     add(f"- Categories: {meta['per_category']}")
     add(f"- Mean total score: {round(sum(totals) / len(totals), 1) if totals else 0} / 100")
     add(f"- Status: PASS {dist['PASS']} / NEEDS_IMPROVEMENT "
@@ -837,7 +892,20 @@ def main(argv=None):
                              "audited_at back to places (DB mode only; "
                              "refused in --from-seed mode; with --dry-run "
                              "prints what would be written)")
+    parser.add_argument("--only-due", action="store_true",
+                        help="score only due posts: never checked "
+                             "(audit_score IS NULL) or last checked at "
+                             "least --rescore-days ago. The full corpus "
+                             "is still loaded (TF-IDF needs it).")
+    parser.add_argument("--rescore-days", type=int, default=30,
+                        help="with --only-due: re-check posts whose last "
+                             "audit is at least this many days old "
+                             "(default 30; exactly N days old counts as "
+                             "due)")
     args = parser.parse_args(argv)
+
+    if args.rescore_days < 0:
+        parser.error("--rescore-days must be >= 0")
 
     db_url = os.environ.get("DATABASE_URL")
     if args.from_seed:
@@ -864,16 +932,36 @@ def main(argv=None):
     print(f"Loaded {len(articles)} articles "
           f"({dict(Counter(a['category'] for a in articles))})")
 
+    # Due-selection: the full corpus stays loaded (D7/D8/D9/D11 need it),
+    # but only the due subset is scored and written back. run_now is
+    # computed once so every due decision in this run uses the same clock.
+    run_now = datetime.now(timezone.utc).astimezone()
+    if args.only_due:
+        to_score = [a for a in articles
+                    if is_due(a, args.rescore_days, run_now)]
+        selection = {
+            "mode": "due-only", "rescore_days": args.rescore_days,
+            "rule": (f"due only — never checked (audit_score IS NULL) OR "
+                     f"audited at least {args.rescore_days} days ago"),
+        }
+        print(f"Due selection: {len(to_score)} of {len(articles)} due "
+              f"({selection['rule']})")
+    else:
+        to_score = list(articles)
+        selection = {"mode": "all", "rescore_days": None,
+                     "rule": "all loaded articles"}
+
     if args.dry_run and not args.write_scores:
-        print(f"Dry run: would score {len(articles)} articles "
-              f"(source: {source}), write audit-report.md + "
+        print(f"Dry run: would score {len(to_score)} "
+              f"{'of ' + str(len(articles)) + ' loaded ' if args.only_due else ''}"
+              f"articles (source: {source}), write audit-report.md + "
               f"audit-report.json + snapshot-<date>.json to "
               f"{args.output_dir}. No outputs written.")
         return 0
     if args.dry_run:
         # --write-scores --dry-run: score in memory, print what would be
         # written, write nothing (no report files, no DB writes).
-        print(f"Dry run: scoring {len(articles)} articles in memory "
+        print(f"Dry run: scoring {len(to_score)} articles in memory "
               f"(source: {source}). No outputs written, nothing written "
               f"to the database.")
     if len(articles) < 2:
@@ -918,12 +1006,16 @@ def main(argv=None):
 
     # Score in batches of ~50; write the JSON after each batch so an
     # interrupted run leaves the last completed batch on disk.
+    # NOTE: the loop scores to_score only (the due subset when
+    # --only-due is given); the TF-IDF / duplicate maps above were built
+    # over the full loaded corpus, so duplicate evidence still sees
+    # every article.
     if not args.dry_run:
         args.output_dir.mkdir(parents=True, exist_ok=True)
     results, rows = [], []
     missing_markers = defaultdict(list)
-    for start in range(0, len(articles), BATCH_SIZE):
-        batch = articles[start:start + BATCH_SIZE]
+    for start in range(0, len(to_score), BATCH_SIZE):
+        batch = to_score[start:start + BATCH_SIZE]
         for article in batch:
             slug = article["slug"]
             d1 = check_d1(article)
@@ -947,7 +1039,7 @@ def main(argv=None):
                 "scores": scores, "total": total, "status": status,
                 "flags": flags, "reasons": reasons,
             })
-        rows = build_rows(articles[:len(results)], results, dup_maps,
+        rows = build_rows(to_score[:len(results)], results, dup_maps,
                           d7, d8, d9)
         if not args.dry_run:
             partial = args.output_dir / "audit-report.json"
@@ -955,19 +1047,25 @@ def main(argv=None):
                 {"run": "partial", "rows": rows}, ensure_ascii=False,
                 indent=2), encoding="utf-8")
         print(f"Batch {start // BATCH_SIZE + 1}: scored "
-              f"{len(results)}/{len(articles)} articles")
+              f"{len(results)}/{len(to_score)} articles")
 
     date = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
     # Naive local datetime for places.audited_at (matches the app's
-    # LocalDateTime / timestamp-without-time-zone columns).
-    run_dt = datetime.now(timezone.utc).astimezone().replace(tzinfo=None)
+    # LocalDateTime / timestamp-without-time-zone columns). Reuses the
+    # same clock as the due-selection above.
+    run_dt = run_now.replace(tzinfo=None)
     meta = {"date": date, "source": source, "rows": len(rows),
+            "loaded": len(articles), "scored": len(rows),
+            "selection": selection,
             "per_category": dict(Counter(a["category"] for a in articles))}
 
     if not args.dry_run:
         snapshot = {"date": date, "source": source, "count": len(articles),
                     "per_category": meta["per_category"],
-                    "slugs": sorted(a["slug"] for a in articles)}
+                    "loaded": len(articles), "scored": len(rows),
+                    "selection": selection,
+                    "slugs": sorted(a["slug"] for a in articles),
+                    "due_slugs": sorted(a["slug"] for a in to_score)}
         (args.output_dir / f"snapshot-{date}.json").write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2),
             encoding="utf-8")
@@ -980,9 +1078,11 @@ def main(argv=None):
              "same_place_pairs": d9, "rows": rows},
             ensure_ascii=False, indent=2), encoding="utf-8")
 
-    if args.write_scores:
+    if args.write_scores and rows:
         updated = write_scores(db_url, rows, run_dt, dry_run=args.dry_run)
         print(f"Score write-back: {updated}/{len(rows)} rows updated")
+    elif args.write_scores:
+        print("Score write-back: 0 rows due — nothing to write")
 
     dist = Counter(r["status"] for r in rows)
     print(f"\nDone: {len(rows)} articles — PASS {dist['PASS']} / "

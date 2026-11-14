@@ -1,6 +1,7 @@
 # hk-daily-places — Content Audit Report (2026-11-14)
 
-- Source: seed:src/main/resources/seed/bulk-places.json (200 articles)
+- Source: seed:src/main/resources/seed/bulk-places.json (loaded 200 articles, scored 200)
+- Selection: all loaded articles
 - Categories: {'MOVIE': 70, 'SHOPPING': 60, 'HIKING': 70}
 - Mean total score: 26.2 / 100
 - Status: PASS 0 / NEEDS_IMPROVEMENT 0 / FAIL 200

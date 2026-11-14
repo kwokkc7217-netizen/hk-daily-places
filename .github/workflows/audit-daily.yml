@@ -1,0 +1,48 @@
+name: content-audit-daily
+
+# Daily content audit (deterministic checks only — no LLM calls).
+# Every day at 11:00 HKT this scores the posts that are due: never checked
+# (audit_score IS NULL) or last checked at least 30 days ago
+# (--only-due, --rescore-days 30). All PUBLISHED articles are loaded
+# every run because the TF-IDF duplicate matrix needs the full corpus,
+# but only due posts are scored and written back. The first daily run
+# scores the whole corpus (~241 never-checked posts); afterwards it
+# settles to ~1 new post a day plus rolling 30-day re-checks. The Gemini
+# API key is NOT used by this workflow — nothing here calls any LLM.
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 11:00 HKT daily (avoids the recommender's 02:00/14:00 UTC runs)
+  workflow_dispatch:
+    inputs:
+      write_scores:
+        description: 'Write scores back to places (audit_score/audit_status/audited_at).'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install scikit-learn psycopg2-binary
+      - name: Run daily audit
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write_scores }}" = "true" ]; then
+            python tools/audit/audit.py --check-images --check-live --only-due --write-scores
+          else
+            python tools/audit/audit.py --check-images --check-live --only-due
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-audit-report
+          path: tools/audit/output/
+          retention-days: 90

@@ -4,6 +4,13 @@
     "date": "2026-11-14",
     "source": "seed:src/main/resources/seed/bulk-places.json",
     "rows": 200,
+    "loaded": 200,
+    "scored": 200,
+    "selection": {
+      "mode": "all",
+      "rescore_days": null,
+      "rule": "all loaded articles"
+    },
     "per_category": {
       "MOVIE": 70,
       "SHOPPING": 60,

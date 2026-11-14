@@ -128,7 +128,7 @@ def load_from_db(db_url):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT slug, title, COALESCE(description, ''), category, "
-                "imageUrl, youtubeId, publishedAt, createdAt, viewCount, "
+                "image_url, youtube_id, published_at, created_at, view_count, "
                 "audit_score, audit_status, audited_at "
                 "FROM places WHERE status = 'PUBLISHED' ORDER BY slug"
             )

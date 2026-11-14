@@ -34,6 +34,13 @@ on:
         default: false
         type: boolean
 
+# Stream Python output live: without this, Python buffers stdout when
+# piped (as in Actions logs) and a long run looks stalled — nothing
+# appears until the buffer fills or the script ends. The llm_audit.py
+# log() helper also flushes per line; this covers audit.py too.
+env:
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   audit:
     runs-on: ubuntu-latest

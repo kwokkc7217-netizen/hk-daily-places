@@ -371,17 +371,56 @@ def build_prompt(article):
         description=article["description"] or "(empty description)")
 
 
+def _missing_closing_braces(text):
+    """Net unclosed '{' in text, ignoring braces inside double-quoted
+    strings (backslash escapes respected). Used to repair a reply the
+    model left unclosed."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+    return max(0, depth)
+
+
 def _extract_json(text):
-    """Parse the model's reply: prefer a strict JSON object, fall back
-    to the first {...} block (models sometimes add a short preamble)."""
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
+    """Parse the model's reply. Candidates, most faithful first: the
+    raw text; the {...} block (a short preamble is tolerated); the
+    block with its missing closing braces appended — the model
+    sometimes puts the verdict inside "reasons" and drops the closing
+    brace, so the object is one '}' short. Strict validation still
+    runs afterwards, so a repaired parse cannot smuggle a bad score
+    through."""
+    if "{" not in text:
         raise ValueError("no JSON object in model reply")
-    return json.loads(match.group(0))
+    candidates = [text]
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    block = match.group(0) if match else text
+    if block != text:
+        candidates.append(block)
+    missing = _missing_closing_braces(block)
+    if missing > 0:
+        candidates.append(block + "}" * missing)
+    last_error = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except (json.JSONDecodeError, TypeError) as e:
+            last_error = e
+    raise last_error
 
 
 def validate_llm_result(data):
@@ -404,6 +443,13 @@ def validate_llm_result(data):
         if not isinstance(reasons.get(key), str) or not reasons[key].strip():
             raise ValueError(f"reasons.{key} is missing or empty")
     verdict = data.get("verdict")
+    if verdict is None and isinstance(reasons, dict):
+        # The model sometimes nests the verdict inside "reasons"
+        # (and drops the closing brace — see _extract_json). It is
+        # still the model's own word, just one level deeper; reading
+        # it here is not deriving a verdict. If it is present but an
+        # invalid value, the check below still rejects it.
+        verdict = reasons.get("verdict")
     if verdict not in VALID_VERDICTS:
         raise ValueError(f"verdict not in {VALID_VERDICTS}: {verdict!r}")
     return scores, reasons, verdict
@@ -498,11 +544,15 @@ def _raw_excerpt(text):
     """Excerpt of a raw model reply for failure diagnosis. Short replies
     are kept whole; long ones keep the head and the tail — the verdict
     sits at the end of the JSON, so the tail is where a missing verdict
-    actually shows. (A head-only excerpt cannot prove a field is
-    missing.) Article content is public, so logging it is fine."""
-    if len(text) <= 1200:
-        return text
-    return text[:600] + "\n...[truncated]...\n" + text[-600:]
+    actually shows. Newlines are flattened to spaces so the excerpt
+    stays on one log line. NOTE: this is returned as plain text, never
+    through repr() — a repr would escape apostrophes as \\' and make a
+    plain "wouldn't" look like a backslash escape the model never
+    wrote."""
+    flat = text.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    if len(flat) <= 1200:
+        return flat
+    return flat[:600] + " ...[truncated]... " + flat[-600:]
 
 
 def score_article_llm(article, api_key, model, mock=False):
@@ -529,7 +579,7 @@ def score_article_llm(article, api_key, model, mock=False):
         except (ValueError, json.JSONDecodeError) as e:
             attempt_errors.append(
                 f"attempt {_attempt + 1}: invalid model output: {e} "
-                f"(raw reply: {_raw_excerpt(text)!r})")
+                f"(raw reply: {_raw_excerpt(text)})")
     return None, None, None, None, " | ".join(attempt_errors)
 
 

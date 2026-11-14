@@ -494,6 +494,17 @@ def call_gemini(prompt, api_key, model):
     return text
 
 
+def _raw_excerpt(text):
+    """Excerpt of a raw model reply for failure diagnosis. Short replies
+    are kept whole; long ones keep the head and the tail — the verdict
+    sits at the end of the JSON, so the tail is where a missing verdict
+    actually shows. (A head-only excerpt cannot prove a field is
+    missing.) Article content is public, so logging it is fine."""
+    if len(text) <= 1200:
+        return text
+    return text[:600] + "\n...[truncated]...\n" + text[-600:]
+
+
 def score_article_llm(article, api_key, model, mock=False):
     """Score one article. Returns (scores dict, total, verdict, reasons,
     error). On invalid model output, retries once with the same prompt;
@@ -504,7 +515,10 @@ def score_article_llm(article, api_key, model, mock=False):
         scores, reasons, verdict = validate_llm_result(data)
         return scores, round(sum(scores.values()) * 2.5, 1), verdict, reasons, None
     prompt = build_prompt(article)
-    last_error = None
+    # Per-attempt errors, each carrying its raw reply — the two attempts
+    # can fail differently (bad JSON vs missing verdict), and the raw
+    # reply is the only evidence of what the model actually returned.
+    attempt_errors = []
     for _attempt in range(2):
         text = call_gemini(prompt, api_key, model)
         try:
@@ -513,13 +527,10 @@ def score_article_llm(article, api_key, model, mock=False):
             return (scores, round(sum(scores.values()) * 2.5, 1),
                     verdict, reasons, None)
         except (ValueError, json.JSONDecodeError) as e:
-            # Keep a short excerpt of the raw reply in the error, so a
-            # failed post can be diagnosed from the report/log — the
-            # full reply is not stored anywhere else. Article content
-            # is public, so logging it is fine.
-            last_error = (f"invalid model output: {e} "
-                          f"(raw reply: {text[:300]!r})")
-    return None, None, None, None, last_error
+            attempt_errors.append(
+                f"attempt {_attempt + 1}: invalid model output: {e} "
+                f"(raw reply: {_raw_excerpt(text)!r})")
+    return None, None, None, None, " | ".join(attempt_errors)
 
 
 # ---------------------------------------------------------------------------
